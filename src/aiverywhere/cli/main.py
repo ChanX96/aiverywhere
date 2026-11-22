@@ -89,6 +89,12 @@ def parser() -> argparse.ArgumentParser:
     publication.add_argument("--info", action="store_true", help="准备实例活动文件，输出路径及内容修订号")
     publication.add_argument("--update", metavar="REV", type=revision, help="从标准输入发布完整文件，核对旧修订")
     sub.add_parser("env", help="只读查看本地运行环境、已授权范围和未验证能力")
+    start = sub.add_parser("start", help="启动常驻 supervisor 和 Web")
+    start.add_argument("--port", type=int, choices=range(0, 65536), metavar="0-65535")
+    sub.add_parser("stop", help="停止常驻 supervisor")
+    sub.add_parser("status", help="查看常驻 supervisor 状态")
+    daemon = sub.add_parser("_daemon", help=argparse.SUPPRESS)
+    daemon.add_argument("--port", type=int, default=None)
     run = sub.add_parser("run", help="执行一次任务，可由宿主委派")
     run.add_argument("prompt", help="任务内容；传 - 可从标准输入读取")
     run.add_argument("--task-id", help="宿主分配的请求 ID，同一项目的重复请求返回已有回执")
@@ -853,6 +859,34 @@ def main(argv=None) -> int:
         store = Store(home, args.project, confirm_shared=args.confirm_shared)
         if args.confirm_shared and args.command not in {"run", "memory"}:
             raise ValueError("--confirm-shared 仅适用于一次 run 或 memory 调用")
+        if args.command == "_daemon":
+            from ..core.supervisor import run_daemon
+            return run_daemon(store, args.port if args.port is not None else store.defaults()["port"])
+        if args.command in {"start", "stop", "status"}:
+            from ..core import supervisor
+            if args.command == "start":
+                info = supervisor.ensure(store, port=args.port)
+                print(json.dumps({"pid": info["pid"], "port": info["port"],
+                                  "url": f"http://127.0.0.1:{info['port']}/",
+                                  "started": info.get("started")}, ensure_ascii=False))
+                return 0
+            if args.command == "stop":
+                print(json.dumps(supervisor.stop(store), ensure_ascii=False))
+                return 0
+            print(json.dumps(supervisor.status(store), ensure_ascii=False))
+            return 0
+        if args.command == "web":
+            from ..core import supervisor
+            info = supervisor.ensure(store, port=args.port,
+                                      open_browser=args.open_browser)
+            print(f"http://127.0.0.1:{info['port']}/", flush=True)
+            return 0
+        if launched:
+            try:
+                from ..core import supervisor
+                supervisor.ensure(store, open_browser="auto")
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(f"常驻 Web 未启动：{exc}", file=sys.stderr, flush=True)
         if args.command == "welcome":
             from ..ui.welcome import show
             initialized = show(store)
@@ -888,11 +922,6 @@ def main(argv=None) -> int:
         if args.command == "link":
             print_json(store.link_agent(args.dir))
             return 0
-        if args.command == "web":
-            from ..integrations.web.server import serve
-            serve(store, args.port if args.port is not None else store.defaults()["port"],
-                  getattr(args, "open_browser", "auto"))
-            return 0
         if args.command == "skill":
             print_json(store.skill_info() if args.info else store.revise_agent(args.update, sys.stdin.read(65537)))
             return 0
@@ -920,6 +949,12 @@ def main(argv=None) -> int:
             text = " ".join(args.note.split())
             print_json(store.remember("线索：" + text[:80], text, "clue", "user"))
             return 0
+        if args.command == "chat":
+            try:
+                from ..core import supervisor
+                supervisor.ensure(store, open_browser="auto")
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(f"常驻 Web 未启动：{exc}", file=sys.stderr, flush=True)
         return asyncio.run(invoke(args, store))
     except KeyboardInterrupt:
         return 130

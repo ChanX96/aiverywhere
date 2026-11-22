@@ -66,12 +66,13 @@ def overview(store: Store) -> dict:
 ASSETS = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"),
           "/app.js": ("app.js", "text/javascript")}
 ENTRY_PATH = re.compile(r"/api/memory/([0-9a-f]{32})")
+CHANNEL_PATH = re.compile(r"/api/channels/([A-Za-z0-9_-]{1,64})/(messages|status)\Z")
 
 
-def create_server(store: Store, port: int) -> ThreadingHTTPServer:
+def create_server(store: Store, port: int, token: str | None = None) -> ThreadingHTTPServer:
     if not 0 <= port <= 65535:
         raise ValueError("端口须在 0–65535 之间")
-    token = secrets.token_urlsafe(32)
+    token = token or secrets.token_urlsafe(32)
     assets = files("aiverywhere.integrations.web").joinpath("static")
     chat = ChatSessions(store)
 
@@ -115,6 +116,8 @@ def create_server(store: Store, port: int) -> ThreadingHTTPServer:
             target = urlsplit(self.path)
             path = target.path
             read = self.command in {"GET", "HEAD"}
+            if read and path == "/api/health":
+                return self.reply(200, {"ok": True, "pid": os.getpid()})
             if path in ASSETS and read:
                 name, mime = ASSETS[path]
                 raw = assets.joinpath(name).read_bytes()
@@ -123,6 +126,25 @@ def create_server(store: Store, port: int) -> ThreadingHTTPServer:
                 return self.reply(200, raw, mime)
             if not secrets.compare_digest(self.headers.get("X-Aiverywhere-Token", ""), token):
                 raise PermissionError("请刷新本地页面以继续")
+            channel_match = CHANNEL_PATH.fullmatch(path)
+            if channel_match and channel_match[2] == "messages" and self.command == "POST":
+                from ...core import channels
+                data = self.body()
+                data["channel"] = channel_match[1]
+                return self.reply(202, channels.receive(store, data, channel_match[1]))
+            if channel_match and channel_match[2] == "status" and read:
+                from ...core import channels
+                ident = parse_qs(target.query).get("task_id", [""])[0]
+                return self.reply(200, channels.status(store, ident))
+            if path == "/api/wechat" and self.command == "POST":
+                from ...core import channels
+                data = self.body()
+                data["channel"] = "wechat"
+                return self.reply(202, channels.receive(store, data, "wechat"))
+            if read and path == "/api/wechat/status":
+                from ...core import channels
+                ident = parse_qs(target.query).get("task_id", [""])[0]
+                return self.reply(200, channels.status(store, ident))
             if read and path == "/api/workspace":
                 # When idle, a tab only checks file metadata. The tag is captured
                 # before reading so a concurrent write is picked up by the next poll.
@@ -208,7 +230,9 @@ def create_server(store: Store, port: int) -> ThreadingHTTPServer:
 
         do_GET = do_HEAD = do_POST = do_PUT = do_DELETE = handle_request
 
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server.token = token
+    return server
 
 
 def serve(store: Store, port: int, open_browser: str = "auto") -> None:

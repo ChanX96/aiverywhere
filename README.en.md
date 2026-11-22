@@ -171,6 +171,24 @@ Point the host at the project skill:
 
 The host uses its own model, tools, and permissions.
 
+### Resident supervisor and Web
+
+The interactive CLI ensures a **single resident supervisor** is running and opens the local Web console:
+
+```sh
+aiverywhere
+aiverywhere start
+aiverywhere status
+aiverywhere stop
+```
+
+- The Web server binds only to `127.0.0.1`.
+- Exiting the CLI does not stop Web chat tasks or channel workers.
+- No launchd/systemd/cron service is registered; starting and stopping are explicit.
+- PID, port, token, and logs stay inside the instance with `0600` permissions.
+
+`aiverywhere web` now ensures the supervisor, prints or opens its URL, and returns instead of blocking the terminal.
+
 ### Model protocols
 
 The CLI supports four protocols:
@@ -326,7 +344,8 @@ This runs Python tests, Shell memory tests, and ShellCheck.
 
 - [Install](docs/guides/install.en.md)
 - [Usage](docs/guides/usage.en.md)
-- [WeChat](docs/guides/wechat.en.md)
+- [Generic channels](docs/guides/channels.en.md)
+- [Legacy WeChat](docs/guides/wechat.en.md)
 - [Design](docs/development/design.md)
 - [Development guide](docs/development/development.en.md)
 - [Chinese README](README.md)

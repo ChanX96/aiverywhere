@@ -221,6 +221,24 @@ aiverywhere skill --info
 
 宿主使用自己的模型、工具和权限；`aiverywhere` 只提供行为约定和记忆协议。
 
+### 常驻进程与 Web
+
+交互式 CLI 默认会确保一个**单实例常驻 supervisor**运行，并打开本地 Web：
+
+```sh
+aiverywhere
+aiverywhere start
+aiverywhere status
+aiverywhere stop
+```
+
+- Web 只绑定 `127.0.0.1`；
+- 退出 CLI 后，Web、Web 对话任务和 channel worker 继续运行；
+- 不注册 launchd、systemd 或 cron，需由用户显式启动/停止；
+- 实例内保存 PID、端口、token 和日志，文件权限 `0600`。
+
+`aiverywhere web` 现在只确保 supervisor 运行并打印/打开地址，不再阻塞终端。
+
 ### 模型协议
 
 CLI 支持四种协议：
@@ -313,7 +331,7 @@ aiverywhere web
 aiverywhere web --no-open
 ```
 
-Web 可以对话、管理记忆和 skill、查看日志，并按需分别授权写文件、执行命令和联网。
+Web 可以对话、管理记忆和 skill、查看日志，并按需分别授权写文件、执行命令和联网。Web 和常驻 worker 由 supervisor 托管；CLI 退出后仍继续运行，直到 `aiverywhere stop`。
 
 ## 记忆
 
@@ -398,7 +416,8 @@ sh tests/shell/memory.sh
 
 - [安装指南](docs/guides/install.md)
 - [使用手册](docs/guides/usage.md)
-- [微信接入](docs/guides/wechat.md)
+- [通用消息通道](docs/guides/channels.md)
+- [微信旧版接入](docs/guides/wechat.md)
 - [设计方案](docs/development/design.md)
 - [开发规范](docs/development/development.md)
 - [English README](README.en.md)

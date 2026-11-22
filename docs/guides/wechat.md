@@ -2,6 +2,8 @@
 
 **简体中文** | [English](wechat.en.md)
 
+> 本文是旧版微信专用协议。新部署建议使用[通用消息通道](channels.md)；旧 `wechat` 配置仍兼容。
+
 aiverywhere **不直接登录个人微信**。以下命令假设 `aiverywhere` 已在 PATH；自定义安装根时加 `--home` 或设置 `AIVERYWHERE_HOME`。个人微信的登录、账号配对、收信验证和发送由可信网关负责；aiverywhere 只负责把已验证的来信变成持久任务、用实例模型生成答复，并把答复和送达回执写回网关。微信通道是可选适配器，不改变宿主或 CLI 的核心 agent loop。
 
 ## 1. 前提
@@ -108,13 +110,13 @@ task = json.loads(result.stdout)
 
 ## 4. 启动外部调度
 
-来信入队后，需要生成并交付答复。aiverywhere 不常驻、不注册系统服务；由外部 cron、launchd、systemd timer 或进程管理器周期调用一次 `wake`：
+来信入队后，需要生成并交付答复。常驻 supervisor 会自动处理 channel/legacy 微信任务；旧部署也可继续由外部 cron、launchd、systemd timer 周期调用一次 `wake`：
 
 ```cron
 * * * * * cd /绝对路径/任务项目 && aiverywhere --project /绝对路径/任务项目 wake --dream
 ```
 
-每次调用会顺序处理到期计划、一个微信任务，并在 `--dream` 且有空闲线索时执行一次普通 Dream。调用越频繁，微信响应越及时；进程存活、重试和日志由外部调度器负责。没有调度器时，微信任务会一直停留在 `queued`。
+常驻 supervisor 启动后会自动处理任务；没有常驻进程时，外部 `wake` 仍可顺序处理。`wake` 每次处理一个微信任务，调用越频繁响应越及时；进程存活、重试和日志由 supervisor 或外部调度器负责。
 
 cron 的 PATH 通常很窄；请使用安装根虚拟环境的绝对命令路径，或在 crontab 中显式设置 PATH。
 

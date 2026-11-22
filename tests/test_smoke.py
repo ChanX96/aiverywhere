@@ -81,7 +81,7 @@ class Smoke(unittest.TestCase):
         self.assertEqual(self.store.agent_file.read_text(), source)
         cfg = Path(info["config"])
         self.assertEqual(json.loads(cfg.read_text()),
-                         {"model": {"model": "original"}, "defaults": {}, "mcpServers": {}, "wechat": {}, "session": {}})
+                         {"model": {"model": "original"}, "defaults": {}, "mcpServers": {}, "wechat": {}, "session": {}, "channels": {}})
         cfg.write_text('{"model":{"model":"updated"}}')
         self.cli("init")
         self.assertEqual(self.store.configuration()["model"]["model"], "updated")

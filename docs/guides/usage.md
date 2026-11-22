@@ -53,7 +53,7 @@ aiverywhere setup --no-input --model "实际模型名" --api-key-env ANTHROPIC_A
     "port": 8765
   },
   "mcpServers": {},
-  "wechat": {}
+  "channels": {}
 }
 ```
 
@@ -119,9 +119,9 @@ aiverywhere setup --no-input --model "实际模型名" --api-key-env ANTHROPIC_A
 
 再用 `aiverywhere run --mcp office '用 office 查询资料'` 单次授权。服务在发现工具时启动，任务结束后关闭。
 
-### 个人微信网关
+### 通用消息通道
 
-由可信网关完成账号配对并验证来信。在 `wechat` 分区绑定一个项目、账号与会话；回执查询和幂等发送按网关实际能力填写。`timeout`、`max_turns` 可覆盖实例默认值。
+WeChat、飞书、iMessage 等平台由桥接器接入，aiverywhere 只处理统一的 channel envelope。新配置使用 `channels` 分区；每个通道只需要网关 URL，账号/会话由入站消息携带，回复自动回到原通道。旧版 `wechat` 分区仍兼容。详见[通用消息通道](channels.md)。
 
 ```json
 {
@@ -267,7 +267,7 @@ aiverywhere web
 
 长时间工作的裸模型 CLI 在每次向模型发送请求前读取当前 agent。交互 CLI 的新任务和追问开始时重新读取执行器配置。原生宿主在工作约定指定的检查点重读，单次已发出的命令沿用它收到的输入。记忆和技能按需取当前修订。[运行中如何感知更新](../development/design.md#运行中的文件变更)
 
-“运行日志”按时间从新到旧展示当前项目的任务，可加载更早记录。日志只读。工作台绑定 `127.0.0.1`，只接受本机同源请求并校验页面令牌；前端资源随包分发，全程可离线使用。`--port 0` 可选取空闲端口。`aiverywhere web` 在 TTY 桌面环境默认尝试打开浏览器；`--no-open` 只打印地址。
+“运行日志”按时间从新到旧展示当前项目的任务，可加载更早记录。日志只读。工作台绑定 `127.0.0.1`，只接受本机同源请求并校验页面令牌；前端资源随包分发，全程可离线使用。`--port 0` 可选取空闲端口。`aiverywhere web` 会确保 supervisor 运行并打印/打开地址，不阻塞终端；`--no-open` 只打印地址。
 
 模型按本次任务需要取回少量记忆。要逐次确认跨项目使用已验证技能，可设 `aiverywhere memory policy ask`，用户同意后用单次全局参数 `--confirm-shared`。普通项目事实留在其来源项目。
 
@@ -284,9 +284,9 @@ aiverywhere schedule add '整理本周进展。' --at 2026-12-07T09:00 --timezon
 aiverywhere wake --dream
 ```
 
-把示例日期替换为期望的首次运行日期。aiverywhere 不登记常驻进程或系统服务；由现有 cron、launchd、systemd timer 或其他进程管理器周期调用一次性 `wake`。每次调用会顺序处理到期计划、一个微信任务，并在 `--dream` 且存在线索时执行一次普通 Dream。调用越频繁，微信响应越及时；调度器本身负责进程存活和重试。
+把示例日期替换为期望的首次运行日期。常驻 supervisor 由 `aiverywhere start` 启动，CLI 退出后继续运行；不登记系统服务。外部 cron、launchd、systemd timer 仍可调用一次性 `wake`。`wake` 每次顺序处理到期计划、一个微信任务，并在 `--dream` 且存在线索时执行一次普通 Dream；常驻 supervisor 启动后可直接处理 channel 任务。
 
 机器关机或休眠错过的任务会在之后的 `run`、`chat` 或 `schedule notices` 提醒一次，是否补做由用户决定。用 `schedule results` 查看执行结果。外部调度器需要能读取安装根的 `data/`，并使用已配置的模型/原生执行器。
-## 微信接入和交付
+## 消息通道与交付
 
-个人微信通过可信网关接入；aiverywhere 不直接登录微信。配置、入站/出站协议、worker、回执、验收和故障排查见[微信接入指南](wechat.md)。
+WeChat、飞书、iMessage 通过可信桥接器接入；aiverywhere 不直接登录平台。通用配置、入站/出站协议、路由和常驻 worker 见[通用消息通道](channels.md)；旧版微信协议见[微信接入指南](wechat.md)。

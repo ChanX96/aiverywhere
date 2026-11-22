@@ -20,7 +20,7 @@ from .store_errors import RevisionConflict
 
 
 RUNTIME_KEYS = ("plans", "jobs", "runs", "notices")
-CONFIG_SECTIONS = ("model", "defaults", "mcpServers", "wechat", "session")
+CONFIG_SECTIONS = ("model", "defaults", "mcpServers", "wechat", "session", "channels")
 RUNTIME_DEFAULTS = {"max_turns": 12, "timeout": 180, "port": 8765}
 SESSION_DEFAULTS = {"max_context_tokens": 64000, "compact_at": 0.8,
                     "keep_recent_turns": 6, "summary_max_chars": 4000}
@@ -261,7 +261,7 @@ class Store:
                     cfg[key] = value
         if (not isinstance(cfg, dict) or cfg.keys() - set(CONFIG_SECTIONS)
                 or not all(isinstance(value, dict) for value in cfg.values())):
-            raise ValueError("config.json 的可选分区为 model、defaults、mcpServers、wechat、session，每个分区须为对象")
+            raise ValueError("config.json 的可选分区为 model、defaults、mcpServers、wechat、session、channels，每个分区须为对象")
         checked_session(cfg.get("session", {}))
         return cfg
 

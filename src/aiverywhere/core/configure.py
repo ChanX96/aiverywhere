@@ -292,7 +292,8 @@ def _write_config(store: Store, model: dict, defaults: dict) -> Path:
         latest = store.configuration()
         complete = {"model": model, "defaults": defaults,
                     "mcpServers": latest.get("mcpServers", {}), "wechat": latest.get("wechat", {}),
-                    "session": latest.get("session", {})}
+                    "session": latest.get("session", {}),
+                    "channels": latest.get("channels", {})}
         atomic_write(path, (json.dumps(complete, ensure_ascii=False, indent=2) + "\n").encode(), mode=0o600)
     return path
 

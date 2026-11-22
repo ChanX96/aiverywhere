@@ -16,7 +16,7 @@
 | 主动工作 | 支持宿主、浏览器和个人微信。由 aiverywhere 自己执行预授权的周期任务，包括宿主缺少定时能力的场景；能在任务之外主动反思（Dream）、验证经验和提出建议。 |
 | 异常恢复 | 因关机、休眠或运行环境中断而错过的任务，在 aiverywhere 下次启动时提醒用户。是否补做由用户决定，后续周期依原计划执行。 |
 
-宿主可直接读取工作约定。独立 CLI 和后台均可把一次任务交给已配置的原生执行器，也可使用裸 Anthropic Messages 端点。记忆使用本地 memory-v1 JSON 文件和日志，事实/技能默认检索会跳过 90 天未更新或未经验证复用的条目；线索不受冷过滤。当前已在 macOS 验证假微信回执恢复，Dream 已改为普通任务并由测试覆盖空线索零调用与线索处理；一次性 `wake` 由外部调度器调用；2026-11-22 在 macOS arm64、Python 3.9.6 和 3.14.2 上验证用户级安装的仅宿主、`--cli`、自定义安装根、重复安装保留数据和项目链接反向定位。真实个人微信、浏览器渠道、Linux 外部调度、真实交互 TTY 及分段记忆索引仍待验证。[运行说明](../../README.md)
+宿主可直接读取工作约定。独立 CLI 和后台均可把一次任务交给已配置的原生执行器，也可使用裸 Anthropic Messages 端点。记忆使用本地 memory-v1 JSON 文件和日志，事实/技能默认检索会跳过 90 天未更新或未经验证复用的条目；线索不受冷过滤。当前已在 macOS 验证假微信回执恢复，Dream 已改为普通任务并由测试覆盖空线索零调用与线索处理；常驻 supervisor 可在 CLI 退出后继续运行 Web 和 channel worker；`wake` 仍由外部调度器调用；2026-11-22 在 macOS arm64、Python 3.9.6 和 3.14.2 上验证用户级安装的仅宿主、`--cli`、自定义安装根、重复安装保留数据和项目链接反向定位。真实个人微信、浏览器渠道、Linux 外部调度、真实交互 TTY 及分段记忆索引仍待验证。[运行说明](../../README.md)
 
 ## 同类项目怎样运作
 
@@ -216,6 +216,19 @@ aiverywhere 启动或从休眠恢复时，按当前用户核对上次检查以�
 ### 用户环境的边界
 
 源码或专用虚拟环境内可以直接运行，使用共享 Python 时显式选择 `--home`。默认启动、读取 skill、查看环境以及 `wake` 均不注册系统服务。安装器只在用户选择的安装根写入虚拟环境、`config.json`、`data/` 和可回收的 `work/`，并可选创建一个 `~/.local/bin` 命令链接和一个项目技能链接；不请求 `sudo`，不修改 shell 启动文件，不写入 cron、launchd 或 systemd 注册文件。已有宿主可按路径读取文件，用户无需全局安装 skill。外部调度器由用户自行管理；后台运行所需的凭据及宿主自身的缓存、日志与权限由该宿主配置管理。
+
+### 常驻 supervisor 与通用通道
+
+CLI 默认确保一个单实例 supervisor 运行。它持有实例内的 PID/端口/token/日志，托管本地 Web 和 channel worker；CLI 退出不会终止它。`aiverywhere start/stop/status` 显式管理，不注册系统服务。
+
+通道层使用统一 envelope：
+
+```json
+{"channel": "feishu", "account": "a", "conversation": "c",
+ "message_id": "stable-id", "text": "..."}
+```
+
+任务记录持久化完整的 channel/account/conversation/message_id；回复只回到该 route。平台桥接器负责登录、验签和实际发送；aiverywhere 不直接登录 WeChat、飞书或 iMessage。旧的 `wechat` 配置和 CLI 入口保留兼容，但新部署使用 `channels`。
 
 ### 模型协议适配
 

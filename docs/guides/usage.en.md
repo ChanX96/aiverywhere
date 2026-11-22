@@ -256,13 +256,15 @@ The console's "Chat & work" page submits tasks to the current instance. It is re
 
 "Agent definition" edits the whole bundle: `SKILL.md`, `references/*.md|json`, and `scripts/*.sh`. Each file has a content-hash revision check; the main file keeps the live-version rules.
 
+Web chat supports a `/` command palette: `/help`, `/new`, `/status`, `/sessions`, `/logs`, `/agent`, `/memory`, `/overview`, `/resume`. Use ↑↓ to select, Tab/Enter to run, Esc to close. It only exposes safe Web actions. Send a literal slash with `//`.
+
 **Project spaces**: one Web server is bound to one project instance and does not switch to arbitrary paths. To switch, launch `aiverywhere` in the target project; it prefers that project's `.aiverywhere/`, with its own port and supervisor. A user-level instance binds one project at a time; run concurrent projects with separate project-local homes. Do not read unregistered project paths from one console.
 
 In the console, use "Memory and skills" to search by title, open a title to view or edit it, and cancel before deleting. "Agent definition" edits the instance-wide working agreement. While the console is open, external edits usually appear within 3 seconds. The page keeps local drafts and reports a conflict when saving an older revision. Deleting the local definition restores the distributed template; `skill --info` recreates the live file for hosts.
 
 A long-running raw Messages CLI rereads the current agent before every model request. New interactive CLI tasks and follow-ups reread the executor configuration when they start. Native hosts reread at the checkpoints described in the working agreement; a command that receives one standard-input payload keeps what it received. Memory and skills use the current revision when recalled. [How running processes see changes](../development/design.md#运行中的文件变更) (Chinese)
 
-"Run log" shows the current project's tasks newest first and can load older entries. Selecting a task id opens its run record; overview statistics and "Run log" link directly to it. The log is read-only. The console binds to `127.0.0.1`, accepts only same-origin local requests, checks a page token, serves its front-end assets from the package, and works fully offline. `--port 0` picks a free port.
+"Run log" shows the current project's tasks newest first and can load older entries. Selecting a task id opens its run record; overview statistics and "Run log" link directly to it. `events.jsonl` keeps summaries; each run also writes a `0600` `data/runs/<hash>.json` with prompt, answer, error, and tool arguments/truncated output. Older tasks have no trace and show summary only. Run records are local sensitive data; do not commit `data/`. The console binds to `127.0.0.1`, accepts only same-origin local requests, checks a page token, serves its front-end assets from the package, and works fully offline. `--port 0` picks a free port.
 
 The model recalls only the small amount of memory needed for the current task. To require confirmation before using a verified skill across projects, set `aiverywhere memory policy ask`; after the user agrees, pass the global `--confirm-shared` for that one call. Ordinary project facts stay in their source project.
 

@@ -219,6 +219,10 @@ aiverywhere 启动或从休眠恢复时，按当前用户核对上次检查以�
 
 ### Web 工作台、会话与项目空间
 
+Web 对话提供安全子集的 `/` 命令菜单：导航、状态、新会话和恢复说明，不把 CLI 的完整命令面伪装成可用。运行日志的 `events.jsonl` 保留摘要；详细 trace 写入实例内 `data/runs/`（`0600`），包含提示词、答复、错误和截断的工具参数与结果，按 run id 关联。
+
+
+
 Web 是 supervisor 托管的单项目控制面。对话 session 仍是 Web 进程内的临时上下文；CLI session 是追加式 JSONL 持久会话，Web 的“会话与任务”页只读取并展示这些 session 和恢复命令，避免两个进程同时写同一会话。一个 Web 绑定一个项目实例，不提供任意路径切换；切换项目使用目标项目的 `.aiverywhere/` 或用户级实例启动另一个 supervisor。
 
 Agent 页面编辑完整 bundle：`SKILL.md`、`references/*.md|json`、`scripts/*.sh`。主文件沿用活动版本修订；其他文件使用内容哈希做并发检查，路径和扩展名在服务端限制。日志页按 task 展示，概览和运行记录提供入口。

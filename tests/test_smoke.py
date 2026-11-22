@@ -361,6 +361,15 @@ class Smoke(unittest.TestCase):
             self.store.audit("web-smoke", "completed", 1)
             self.assertEqual(web.get("/api/logs").json()["rows"][0]["task_id"], "web-smoke")
             self.assertEqual(web.delete("/api/logs").status_code, 405)
+            self.store.audit("web-smoke", "completed", 1, run_id="run-web-smoke",
+                             detail={"prompt": "读取 README", "answer": "已读取",
+                                     "trace": [{"tool": "read_file", "input": {"path": "README.md"},
+                                                "ok": True, "output": "内容"}]})
+            self.assertEqual(web.get("/api/logs").json()["rows"][0]["run_id"], "run-web-smoke")
+            detailed = web.get("/api/runs/run-web-smoke")
+            self.assertEqual(detailed.status_code, 200)
+            self.assertEqual(detailed.json()["trace"][0]["tool"], "read_file")
+            self.assertEqual(detailed.json()["prompt"], "读取 README")
             agent = before.json()["agent"]
             changed = web.put("/api/agent", json={"revision": agent["revision"], "text": agent["text"] + "\n测试修订。"})
             self.assertEqual(web.request("DELETE", "/api/agent", json={"revision": changed.json()["revision"]}).status_code, 200)
@@ -527,3 +536,32 @@ class Smoke(unittest.TestCase):
         self.assertEqual(lookups, ["/messages/" + key] * 2)
         self.assertEqual(json.loads(self.cli("wechat", "--status", key))["receipt"], "receipt-17")
         self.assertEqual(wechat.receive(self.store, message)["delivery"], "delivered")
+
+
+class RunTraceTest(unittest.TestCase):
+    def test_task_run_persists_tool_trace(self):
+        import tempfile
+        from pathlib import Path
+        from aiverywhere.core.agent import Task
+        from aiverywhere.core.store import Store
+
+        class Provider:
+            async def agentloop(self, task, environment, messages, prompt, max_turns, checkpoint, **kwargs):
+                remote = type("Remote", (), {"selected": {}})()
+                await task._tool_result({"id": "tool-1", "name": "list_files",
+                                         "input": {"path": "."}}, remote)
+                return "完成", messages + [{"role": "assistant", "content": "完成"}]
+
+        with tempfile.TemporaryDirectory() as root:
+            project = Path(root) / "project"
+            project.mkdir()
+            store = Store(Path(root) / "instance", project)
+            store.initialize()
+            task = Task(store)
+            asyncio.run(task.run("列目录", Provider(), max_turns=2, timeout=10))
+            detail = store.run_detail(task.run_id)
+            self.assertEqual(detail["prompt"], "列目录")
+            self.assertEqual(detail["answer"], "完成")
+            self.assertEqual(detail["trace"][0]["tool"], "list_files")
+            self.assertTrue(detail["trace"][0]["ok"])
+            self.assertIn("output", detail["trace"][0])

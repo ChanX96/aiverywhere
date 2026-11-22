@@ -42,7 +42,7 @@ def log_page(store: Store, before: int | None = None, limit: int = 50) -> dict:
                 except (UnicodeDecodeError, ValueError):
                     continue
                 if isinstance(event, dict) and event.get("project") == str(store.project):
-                    rows.append({k: event.get(k) for k in ("task_id", "time", "status", "tool_calls")})
+                    rows.append({k: event.get(k) for k in ("task_id", "run_id", "time", "status", "tool_calls")})
                     if len(rows) == limit:
                         return {"rows": rows, "before": end or None}
             cursor = start
@@ -73,6 +73,7 @@ ASSETS = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"),
           "/app.js": ("app.js", "text/javascript")}
 ENTRY_PATH = re.compile(r"/api/memory/([0-9a-f]{32})")
 SESSION_PATH = re.compile(r"/api/sessions/([0-9a-f]{32})\Z")
+RUN_PATH = re.compile(r"/api/runs/([A-Za-z0-9_-]{1,200})\Z")
 CHANNEL_PATH = re.compile(r"/api/channels/([A-Za-z0-9_-]{1,64})/(messages|status)\Z")
 
 
@@ -188,6 +189,12 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
             if path == "/api/chat/reset" and self.command == "POST":
                 data = self.body()
                 return self.reply(200, chat.reset(data.get("session")))
+            if read and RUN_PATH.fullmatch(path):
+                run_id = RUN_PATH.fullmatch(path)[1]
+                try:
+                    return self.reply(200, store.run_detail(run_id))
+                except (OSError, ValueError) as exc:
+                    return self.reply(404, {"error": str(exc)})
             if read and path == "/api/sessions":
                 return self.reply(200, {"sessions": SessionStore(store).list()})
             if read and SESSION_PATH.fullmatch(path):

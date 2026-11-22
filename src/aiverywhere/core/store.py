@@ -551,8 +551,45 @@ class Store:
             self.memory.forget(item_id)
         return {"deleted": item_id}
 
-    def audit(self, task_id: str, status: str, calls: int) -> None:
-        event = {"task_id": task_id, "project": str(self.project), "time": time.time(),
-                 "status": status, "tool_calls": calls}
-        with self.locked(), self.local("events.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+    def _runs_dir(self) -> Path:
+        path = self.data / "runs"
+        if path.is_symlink():
+            raise PermissionError("运行记录目录不能是符号链接")
+        path.mkdir(mode=0o700, exist_ok=True)
+        if not path.resolve().is_relative_to(self.home.resolve()):
+            raise PermissionError("运行记录目录必须位于实例内")
+        return path
+
+    def _run_path(self, task_id: str) -> Path:
+        if not isinstance(task_id, str) or not task_id or len(task_id) > 200:
+            raise ValueError("任务标识无效")
+        return self._runs_dir() / (hashlib.sha256(task_id.encode()).hexdigest() + ".json")
+
+    def run_detail(self, run_id: str) -> dict:
+        path = self._run_path(run_id)
+        if not path.is_file() or path.is_symlink():
+            raise ValueError("没有该任务的详细运行记录")
+        try:
+            data = json.loads(path.read_bytes())
+        except (OSError, ValueError) as exc:
+            raise ValueError("详细运行记录损坏") from exc
+        if (not isinstance(data, dict) or data.get("run_id") != run_id
+                or data.get("project") != str(self.project)):
+            raise ValueError("详细运行记录不属于当前任务")
+        return data
+
+    def audit(self, task_id: str, status: str, calls: int, *, run_id: str | None = None,
+              detail: dict | None = None) -> None:
+        run_id = run_id or task_id
+        event = {"task_id": task_id, "run_id": run_id, "project": str(self.project),
+                 "time": time.time(), "status": status, "tool_calls": calls}
+        with self.locked():
+            with self.local("events.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+            if detail is not None:
+                payload = {"task_id": task_id, "run_id": run_id, "project": str(self.project),
+                           "time": event["time"], "status": status, "tool_calls": calls,
+                           **detail}
+                atomic_write(self._run_path(run_id),
+                             (json.dumps(payload, ensure_ascii=False) + "\n").encode(),
+                             mode=0o600)

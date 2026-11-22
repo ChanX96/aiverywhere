@@ -164,6 +164,19 @@ let chat = {
   started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
 };
 
+const webCommands = [
+  ["/help", "查看 Web 命令和快捷键"],
+  ["/new", "开始新的 Web 会话"],
+  ["/status", "当前 Web session、task 和权限模式"],
+  ["/sessions", "查看持久 CLI session，获取恢复命令"],
+  ["/logs", "查看运行记录和任务详情"],
+  ["/agent", "编辑 Agent bundle 文件"],
+  ["/memory", "管理记忆与技能"],
+  ["/overview", "返回实例概览"],
+  ["/resume", "如何从历史会话继续"],
+];
+let slashIndex = 0, slashMatches = [], slashPrefix = null;
+
 const chatElapsed = () => Math.max(0, Math.round((Date.now() - (chat.started || Date.now())) / 1000));
 
 function autoGrow(input) {
@@ -239,8 +252,9 @@ function chatView() {
       </header>
       <div class="chat-stream" id="chat-stream"></div>
       <form class="chat-composer" id="chat-form">
-        <textarea id="chat-input" rows="2" maxlength="32000" placeholder="输入任务，例如：读取 README 并总结这个项目…" aria-label="任务内容"></textarea>
-        <div class="chat-composer-foot"><span>Enter 发送 · Shift+Enter 换行 · 本地会话</span>
+        <div class="slash-menu" id="chat-slash" role="listbox" aria-label="Web 命令" hidden></div>
+        <textarea id="chat-input" rows="2" maxlength="32000" placeholder="输入任务，或输入 / 查看命令…" aria-label="任务内容" autocomplete="off"></textarea>
+        <div class="chat-composer-foot"><span>Enter 发送 · Shift+Enter 换行 · 输入 / 查看命令</span>
           <button class="send" id="chat-send" type="submit" aria-label="发送任务">↑</button></div>
       </form>
     </section>
@@ -323,12 +337,81 @@ async function pollChat() {
   }
 }
 
+function hideSlash() {
+  slashPrefix = null;
+  slashMatches = [];
+  const menu = $("#chat-slash");
+  if (menu) menu.hidden = true;
+}
+
+function paintSlash() {
+  const menu = $("#chat-slash"), input = $("#chat-input");
+  if (!menu || !input) return;
+  const value = input.value;
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes(" ") || value.includes("\n")) {
+    hideSlash();
+    return;
+  }
+  if (value !== slashPrefix) slashIndex = 0;
+  slashPrefix = value;
+  slashMatches = webCommands.filter(([command]) => command.startsWith(value));
+  if (!slashMatches.length) { hideSlash(); return; }
+  slashIndex = Math.min(slashIndex, slashMatches.length - 1);
+  menu.innerHTML = `<div class="slash-menu-head">Web 命令 <small>↑↓ 选择 · Tab/Enter 执行 · Esc 关闭</small></div>` +
+    slashMatches.map(([command, detail], index) => `<button type="button" class="slash-item ${index === slashIndex ? "active" : ""}"
+      role="option" aria-selected="${index === slashIndex}" data-command="${esc(command)}"><b>${esc(command)}</b><span>${esc(detail)}</span></button>`).join("");
+  menu.hidden = false;
+}
+
+function systemMessage(text) {
+  chat.messages.push({role: "system", text});
+  paintChat();
+}
+
+async function runWebCommand(raw) {
+  const command = raw.trim().split(/\s+/, 1)[0];
+  hideSlash();
+  if (command === "/help") {
+    systemMessage("Web 命令：\n" + webCommands.map(([name, detail]) => `${name}  ${detail}`).join("\n") +
+      "\n\n键盘：/ 打开菜单，↑↓ 选择，Tab 或 Enter 执行，Esc 关闭。");
+    return;
+  }
+  if (command === "/new") { await resetChat(); return; }
+  if (command === "/status") {
+    systemMessage(`Web session: ${chat.session}\n` +
+      `task: ${chat.task || "—"}\n` +
+      `状态: ${chat.running ? "运行中" : "空闲"}\n` +
+      `模式: ${chat.writable ? "可写" : "只读"} / ${chat.exec ? "可执行" : "只读命令"} / ${chat.network ? "联网" : "无网络"}\n` +
+      "说明：Web 对话是 supervisor 进程内上下文；持久历史请用 /sessions。");
+    return;
+  }
+  if (command === "/sessions" || command === "/logs" || command === "/agent" || command === "/memory" || command === "/overview") {
+    location.hash = command.slice(1);
+    return;
+  }
+  if (command === "/resume") {
+    systemMessage("Web 不能直接续写 CLI session。打开“会话与任务”查看 session，复制恢复命令：\n" +
+      "aiverywhere chat --resume <session-id>\n" +
+      "或在终端输入 aiverywhere，再用 /sessions 和 /resume。");
+    return;
+  }
+  systemMessage(`未知命令：${command}\n输入 /help 查看 Web 命令。`);
+}
+
 async function sendChat() {
-  if (chat.running) return;
   const input = $("#chat-input");
-  const message = input?.value.trim();
+  let message = input?.value.trim();
   if (!message) return;
+  if (message.startsWith("/") && !message.startsWith("//")) {
+    input.value = "";
+    hideSlash();
+    await runWebCommand(message);
+    return;
+  }
+  if (chat.running) return;
+  if (message.startsWith("//")) message = message.slice(1);
   input.value = "";
+  hideSlash();
   chat.messages.push({role: "user", text: message});
   chat.messages.push({role: "assistant", pending: true, text: "", error: "", receipts: []});
   chat.running = true;
@@ -567,8 +650,33 @@ async function action(name, button) {
     case "log-detail": {
       const row = logRows[Number(button.dataset.index)];
       if (!row) return;
+      const runId = row.run_id || row.task_id;
+      let detail = null;
+      try { detail = await api("/api/runs/" + encodeURIComponent(runId)); }
+      catch (error) { detail = null; }
       $("#detail-title").textContent = "运行记录";
-      $("#detail-body").textContent = JSON.stringify(row, null, 2);
+      if (!detail) {
+        $("#detail-body").textContent = JSON.stringify(row, null, 2) +
+          "\n\n（旧任务只有摘要，没有详细 trace。新任务会记录提示词、工具输入/输出和答复。）";
+      } else {
+        const tools = (detail.trace || []).map((item, index) => {
+          const input = typeof item.input === "string" ? item.input : JSON.stringify(item.input ?? {}, null, 2);
+          const output = item.output || item.error || "";
+          return `#${index + 1} ${item.tool} ${item.ok === false ? "失败" : "成功"}\n参数：\n${input}\n结果：\n${output}`;
+        }).join("\n\n");
+        $("#detail-body").textContent = [
+          `task:   ${detail.task_id}`,
+          `run:    ${detail.run_id}`,
+          `status: ${detail.status}`,
+          `entry:  ${detail.entry || "—"}`,
+          `time:   ${date(detail.time)}`,
+          `duration: ${detail.started && detail.finished ? Math.max(0, detail.finished - detail.started).toFixed(2) + "s" : "—"}`,
+          "", "## Prompt", detail.prompt || "（无）",
+          "", "## Answer", detail.answer || "（无）",
+          detail.error ? `\n## Error\n${detail.error}` : "",
+          "", "## Tools", tools || "（没有工具调用）"
+        ].join("\n");
+      }
       $("#detail").showModal();
       break;
     }
@@ -635,7 +743,7 @@ $("#view").addEventListener("input", event => {
     agentDraft = {path, text:event.target.value, revision};
     $('[data-action="discard"]').disabled = false;
   }
-  if (event.target.id === "chat-input") { setChatSend(); autoGrow(event.target); }
+  if (event.target.id === "chat-input") { setChatSend(); autoGrow(event.target); paintSlash(); }
 });
 $("#view").addEventListener("change", event => {
   if (event.target.id === "chat-writable") setChatWritable(event.target.checked).catch(e => toast(e.message, true));
@@ -646,7 +754,26 @@ $("#view").addEventListener("submit", event => {
   if (event.target.id === "chat-form") { event.preventDefault(); sendChat(); }
 });
 document.addEventListener("keydown", event => {
-  if (event.target.id === "chat-input" && event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+  if (event.target.id !== "chat-input") return;
+  const menu = $("#chat-slash");
+  const open = menu && !menu.hidden;
+  if (open && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+    event.preventDefault();
+    slashIndex = (slashIndex + (event.key === "ArrowDown" ? 1 : -1) + slashMatches.length) % slashMatches.length;
+    paintSlash();
+    return;
+  }
+  if (open && ["Tab", "Enter"].includes(event.key) && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    const command = slashMatches[slashIndex]?.[0];
+    if (command) {
+      $("#chat-input").value = command;
+      sendChat();
+    }
+    return;
+  }
+  if (open && event.key === "Escape") { event.preventDefault(); hideSlash(); return; }
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     sendChat();
   }
@@ -654,6 +781,11 @@ document.addEventListener("keydown", event => {
 $("#view").addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button) return;
+  if (button.dataset.command) {
+    $("#chat-input").value = button.dataset.command;
+    sendChat();
+    return;
+  }
   if (button.dataset.filter) { filter = button.dataset.filter; render(); }
   if (button.dataset.action) action(button.dataset.action, button).catch(e => toast(e.message, true));
 });

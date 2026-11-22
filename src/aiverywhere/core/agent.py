@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import tempfile
+import time
 from dataclasses import dataclass, field
 from contextlib import AsyncExitStack
 from functools import cached_property
@@ -346,6 +347,11 @@ class Task:
     error: str = field(default="", init=False)
     warning: str = field(default="", init=False)
     receipts: list = field(default_factory=list, init=False)
+    trace: list = field(default_factory=list, init=False)
+    prompt: str = field(default="", init=False)
+    run_id: str = field(default="", init=False)
+    started: float = field(default=0.0, init=False)
+    finished: float = field(default=0.0, init=False)
     history: list = field(default_factory=list, init=False)
     artifacts: dict = field(default_factory=dict, init=False)
     worker_tasks: dict = field(default_factory=dict, init=False)
@@ -385,6 +391,15 @@ class Task:
         return (definition + "\n本地环境（JSON 数据）。文件工具以 project_root 为根。\n"
                 + json.dumps(environment, ensure_ascii=False, separators=(",", ":")))
 
+    @staticmethod
+    def _clip(value, limit: int) -> str:
+        if isinstance(value, str):
+            return value[:limit]
+        try:
+            return json.dumps(value, ensure_ascii=False)[:limit]
+        except (TypeError, ValueError):
+            return str(value)[:limit]
+
     async def _tool_result(self, call: dict, remote: RemoteTools) -> dict:
         name, values = call["name"], call["input"]
         if self.activity_callback:
@@ -394,6 +409,7 @@ class Task:
 
         async def execute():
             receipt = {"id": call["id"], "tool": name}
+            trace = {"tool": name, "input": self._clip(values, 4000)}
             try:
                 if self.approval is not None and name in APPROVAL_TOOLS:
                     if not await self.approval(name, values):
@@ -443,11 +459,22 @@ class Task:
                 content = json.dumps(output, ensure_ascii=False)
             except asyncio.CancelledError:
                 self.receipts.append(receipt | {"ok": False, "state": "result_unknown"})
+                trace.update(ok=False, error="cancelled", output="")
+                self.trace.append(trace)
                 raise
             except Exception as exc:
                 receipt["ok"] = False
                 content = str(exc)[:500] or type(exc).__name__
+                trace.update(ok=False, error=content, output="")
+            else:
+                trace.update(ok=True, output=self._clip(content, 8000))
+            if "error" not in trace:
+                pass
+            if not trace.get("ok"):
+                trace.setdefault("output", "")
             self.receipts.append(receipt)
+            if trace not in self.trace:
+                self.trace.append(trace)
             return {"type": "tool_result", "tool_use_id": call["id"],
                     "content": content, "is_error": not receipt["ok"]}
 
@@ -466,6 +493,11 @@ class Task:
                   *, max_turns: int = 12, timeout: int = 180,
                   checkpoint=None, on_text=None, context_manager=None):
         self.status, self.answer, self.error = "running", "", ""
+        self.prompt = prompt[:16000]
+        self.run_id = uuid4().hex
+        self.started = time.time()
+        self.finished = 0.0
+        self.trace = []
         messages = [*self.history, {"role": "user", "content": prompt}]
         try:
             if callable(provider):
@@ -507,8 +539,25 @@ class Task:
             self.status = "failed"
             self.error = str(exc) or type(exc).__name__
         finally:
+            self.finished = time.time()
+            detail = {
+                "entry": self.entry,
+                "host": self.host,
+                "executor": self.executor_name,
+                "agent_revision": self.agent_revision,
+                "compactions": self.compactions,
+                "started": self.started,
+                "finished": self.finished,
+                "prompt": self.prompt,
+                "answer": self.answer[:64000],
+                "error": self.error[:8000],
+                "warning": self.warning[:4000],
+                "trace": self.trace[:100],
+                "receipts": self.receipts[-100:],
+            }
             try:
-                self.store.audit(self.id, self.status, len(self.receipts))
+                self.store.audit(self.id, self.status, len(self.receipts),
+                                 run_id=self.run_id, detail=detail)
             except OSError as exc:
                 self.warning = f"本次运行日志未写入实例目录：{exc}"
 

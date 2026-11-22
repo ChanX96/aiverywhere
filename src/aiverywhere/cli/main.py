@@ -83,7 +83,7 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("prompt", help="任务内容；传 - 可从标准输入读取")
     run.add_argument("--task-id", help="宿主分配的请求 ID，同一项目的重复请求返回已有回执")
     chat = sub.add_parser("chat", help="交互式 CLI，一次推进一个前台任务，可 /cancel")
-    chat.add_argument("--new", dest="new_session", action="store_true", help="开始新的 CLI session")
+    chat.add_argument("--new", dest="new_session", action="store_true", default=argparse.SUPPRESS, help="开始新的 CLI session")
     for command in (run, chat):
         command.add_argument("--model", help="Anthropic 兼容端点的模型名（或 AIVERYWHERE_MODEL）")
         command.add_argument("--mcp", action="append", default=[], metavar="NAME",

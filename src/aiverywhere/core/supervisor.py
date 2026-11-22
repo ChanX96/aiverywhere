@@ -75,6 +75,7 @@ def _port_available(port: int) -> bool:
     if port == 0:
         return True
     probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         probe.bind(("127.0.0.1", port))
         return True

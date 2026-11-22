@@ -2,7 +2,7 @@
 
 [简体中文](install.md) | **English**
 
-Host-only installation needs macOS or Linux with POSIX `sh`; `jq` is optional. Without it, installation and skill loading still work, while Shell memory scripts report `unavailable`. The optional CLI needs Python 3.9+. Installation is host-neutral: any agent that can read files and run commands follows the same guide. The user only needs one sentence:
+Host-only installation needs macOS or Linux with POSIX `sh`; `jq` is optional. Without it, installation and skill loading still work, while Shell memory scripts report `unavailable`. The optional CLI needs Python 3.11+. Installation is host-neutral: any agent that can read files and run commands follows the same guide. The user only needs one sentence:
 
 ```text
 Install aiverywhere: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
@@ -24,7 +24,7 @@ Requires POSIX `sh` only; no Python or CLI.
 Install the aiverywhere CLI: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
 ```
 
-Requires Python 3.9+; model configuration can come from environment variables.
+Requires Python 3.11+; model configuration can come from environment variables.
 
 ### C. Install the skill manually
 
@@ -195,7 +195,7 @@ To remove only the CLI and keep memory/configuration, do not delete `config.json
 
 ## Troubleshooting
 
-- **Python 3.9+ not found**: only the optional CLI needs it; install `python3`, or set `AIVERYWHERE_PYTHON=/path/to/python3`.
+- **Python 3.11+ not found**: only the optional CLI needs it; install `python3`, or set `AIVERYWHERE_PYTHON=/path/to/python3`.
 - **Cannot create a virtual environment**: on Debian/Ubuntu install `python3-venv`, or use a Python with `-m venv` support.
 - **Slow pip downloads**: set `PIP_INDEX_URL` to a mirror.
 - **`aiverywhere: command not found`**: add `~/.local/bin` to `PATH`, use the CLI instance's `venv/bin/aiverywhere`, or rerun the installer with `--cli`.

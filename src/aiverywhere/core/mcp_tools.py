@@ -27,7 +27,7 @@ class RemoteTools:
             from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
         except ImportError as exc:
-            raise ValueError("MCP 需要 Python 3.10+ 和 python -m pip install '.[mcp]'") from exc
+            raise ValueError("MCP 需要 Python 3.11+ 和 python -m pip install '.[mcp]'") from exc
         config = self.store.configuration().get("mcpServers", {})[server]
         if "allowedTools" in config:
             allowed = config["allowedTools"]

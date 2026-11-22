@@ -1,3 +1,3 @@
-from .main import executor, input_lines, invoke, main
+from .main import executor, input_lines, invoke
 
-__all__ = ["main", "invoke", "input_lines", "executor"]
+__all__ = ["invoke", "input_lines", "executor"]

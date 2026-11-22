@@ -2,7 +2,7 @@
 
 **简体中文** | [English](install.en.md)
 
-仅宿主安装适用于 macOS 或 Linux、POSIX `sh`；`jq` 可选，缺失时仍能安装和加载 skill，但 Shell 记忆脚本会返回 `unavailable`。可选 CLI 需要 Python 3.9+。安装不区分宿主产品：任意能读文件、能执行命令的 agent 使用同一份指南。用户给出下面一句话即可：
+仅宿主安装适用于 macOS 或 Linux、POSIX `sh`；`jq` 可选，缺失时仍能安装和加载 skill，但 Shell 记忆脚本会返回 `unavailable`。可选 CLI 需要 Python 3.11+。安装不区分宿主产品：任意能读文件、能执行命令的 agent 使用同一份指南。用户给出下面一句话即可：
 
 ```text
 安装 aiverywhere：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
@@ -26,7 +26,7 @@
 安装 aiverywhere CLI：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
 ```
 
-需要 Python 3.9+；模型配置可通过环境变量传入。
+需要 Python 3.11+；模型配置可通过环境变量传入。
 
 ### C. 手动安装 skill
 
@@ -198,7 +198,7 @@ rm -rf ~/.aiverywhere
 
 ## 故障排查
 
-- **找不到 Python 3.9+**：只有安装可选 CLI 时才需要；可安装 `python3`，或设置 `AIVERYWHERE_PYTHON=/path/to/python3`。
+- **找不到 Python 3.11+**：只有安装可选 CLI 时才需要；可安装 `python3`，或设置 `AIVERYWHERE_PYTHON=/path/to/python3`。
 - **无法创建虚拟环境**：Debian/Ubuntu 安装 `python3-venv`；或使用已有 Python 的 `-m venv` 能力。
 - **pip 下载慢**：设置 `PIP_INDEX_URL` 使用镜像。
 - **`aiverywhere: command not found`**：把 `~/.local/bin` 加入 PATH，或使用 CLI 实例的 `venv/bin/aiverywhere`；也可重新运行安装器并加 `--cli`。

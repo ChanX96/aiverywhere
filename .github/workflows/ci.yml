@@ -20,8 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            python: "3.9"
+          - os: ubuntu-24.04
+            python: "3.11"
           - os: macos-latest
             python: "3.14"
     runs-on: ${{ matrix.os }}
@@ -79,7 +79,8 @@ jobs:
           /tmp/verify/bin/python - <<'PY'
           from importlib.resources import files
           root = files("aiverywhere")
-          for name in ("SKILL.md", "py.typed", "static/index.html", "static/app.css", "static/app.js",
+          for name in ("SKILL.md", "py.typed", "integrations/web/static/index.html",
+                       "integrations/web/static/app.css", "integrations/web/static/app.js",
                        "skill/SKILL.md", "skill/references/memory.md",
                        "skill/scripts/init-instance.sh"):
               assert root.joinpath(name).is_file(), name

@@ -94,8 +94,12 @@ class ChatSessions:
         if not isinstance(session, str) or not SESSION.fullmatch(session):
             raise ValueError("会话标识无效")
         with self.lock:
-            record = self.records.pop(session, None)
+            record = self.records.get(session)
             if record and record["thread"] and record["thread"].is_alive():
-                self.records[session] = record
-                raise ValueError("任务运行中，不能重置会话")
+                # The worker sets the task status before its thread fully exits.
+                # A completed/failed task is safe to reset; only a genuinely
+                # queued/running task must be rejected.
+                if record["task"].result().get("status") in {"queued", "running"}:
+                    raise ValueError("任务运行中，不能重置会话")
+            self.records.pop(session, None)
         return {"session": session, "reset": True}

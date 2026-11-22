@@ -182,8 +182,12 @@ class Smoke(unittest.TestCase):
                     "content": [{"type": "text", "text": "done:" + prompt}]})
 
             async def lines():
+                # Feed a piped line after each turn; older runtimes otherwise
+                # race /quit ahead of the second queued task.
                 yield "first"
+                await asyncio.sleep(0.05)
                 yield "second"
+                await asyncio.sleep(0.05)
                 yield "/quit"
 
             self.store.initialize()

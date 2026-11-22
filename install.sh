@@ -115,10 +115,10 @@ confirm() {
 }
 
 find_python() {
-    for CANDIDATE in ${AIVERYWHERE_PYTHON:-} python3 python3.14 python3.13 python3.12 python3.11 python3.10 python3.9; do
+    for CANDIDATE in ${AIVERYWHERE_PYTHON:-} python3 python3.14 python3.13 python3.12 python3.11; do
         [ -n "$CANDIDATE" ] || continue
         command -v "$CANDIDATE" >/dev/null 2>&1 || continue
-        if "$CANDIDATE" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; then
+        if "$CANDIDATE" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
             printf '%s' "$CANDIDATE"
             return 0
         fi
@@ -176,8 +176,12 @@ BIN_DIR=$(absolute_path "$(expand_path "$BIN_DIR")")
 
 if [ -t 0 ] && [ -t 1 ]; then
     TTY_FD=0
-elif { exec 3</dev/tty; } 2>/dev/null; then
-    TTY_FD=3
+elif (exec 3</dev/tty) 2>/dev/null; then
+    # Test in a subshell: dash exits the whole script on a failed exec in a
+    # compound-list condition. Re-open in the parent only after the probe.
+    if exec 3</dev/tty 2>/dev/null; then
+        TTY_FD=3
+    fi
 fi
 
 case "$WITH_CLI" in
@@ -316,7 +320,7 @@ else
     note "未找到本地 skill bundle；CLI 将退回到原来的 Python 技能初始化"
 fi
 
-PYTHON=$(find_python) || fail "需要 Python 3.9 或更高版本；请先安装 Python，或用 AIVERYWHERE_PYTHON 指定解释器"
+PYTHON=$(find_python) || fail "需要 Python 3.11 或更高版本；请先安装 Python，或用 AIVERYWHERE_PYTHON 指定解释器"
 [ -n "$VENV" ] || VENV="$HOME_DIR/venv"
 
 note "aiverywhere 安装器"
@@ -330,8 +334,8 @@ if [ ! -x "$VENV/bin/python" ]; then
     note "创建虚拟环境：$VENV"
     run "$PYTHON" -m venv "$VENV" || fail "无法创建虚拟环境。Debian/Ubuntu 可先安装 python3-venv"
 else
-    "$VENV/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' ||
-        fail "现有虚拟环境的 Python 低于 3.9：${VENV}；请删除后重试"
+    "$VENV/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' ||
+        fail "现有虚拟环境的 Python 低于 3.11：${VENV}；请删除后重试"
     if [ "$DRY_RUN" -eq 0 ] && ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
         "$VENV/bin/python" -m ensurepip --upgrade >/dev/null 2>&1 || fail "虚拟环境缺少 pip：$VENV"
     fi

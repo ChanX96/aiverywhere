@@ -104,6 +104,12 @@ class Configure(unittest.TestCase):
         self.assertEqual({command for command, _ in _slash_matches("/")}, commands)
         self.assertEqual([command for command, _ in _slash_matches("/he")], ["/help"])
 
+    def test_root_interactive_permission_flags_parse(self):
+        from aiverywhere.cli.main import parser
+        args = parser().parse_args(["--allow-write", "--allow-exec"])
+        self.assertTrue(args.root_allow_write)
+        self.assertTrue(args.root_allow_exec)
+
     def test_session_settings_are_validated(self):
         self.store.initialize()
         self.assertEqual(self.store.session_settings()["compact_at"], 0.8)

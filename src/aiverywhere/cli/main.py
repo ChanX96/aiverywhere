@@ -47,6 +47,10 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--host", help="由调用者声明的宿主名称，可省略")
     root.add_argument("--confirm-shared", action="store_true", help="用户已同意本次使用共用技能")
     root.add_argument("--new", dest="new_session", action="store_true", help="开始新的 CLI session（默认恢复最近 session）")
+    root.add_argument("--allow-write", dest="root_allow_write", action="store_true",
+                      help="交互式 CLI 允许写入项目文件（也可用 aiverywhere chat --allow-write）")
+    root.add_argument("--allow-exec", dest="root_allow_exec", action="store_true",
+                      help="交互式 CLI 允许执行命令（也可用 aiverywhere chat --allow-exec）")
     sub = root.add_subparsers(dest="command")
     sub.add_parser("welcome", help="显示欢迎屏；直接运行 aiverywhere 会显示并进入交互")
     sub.add_parser("init", help="在安装根 data/ 中准备活动 agent 和统一配置，保留已有数据")
@@ -700,13 +704,14 @@ async def invoke(args, store: Store) -> int:
         return await one(args, store, executor(client, args.model, store))
 
 
-def welcome_chat(store: Store, new_session: bool = False) -> int:
+def welcome_chat(store: Store, new_session: bool = False, allow_write: bool = False,
+                 allow_exec: bool = False) -> int:
     import httpx
 
     defaults = store.defaults()
-    args = argparse.Namespace(command="chat", json=False, allow_write=False,
+    args = argparse.Namespace(command="chat", json=False, allow_write=allow_write,
                               max_turns=defaults["max_turns"], timeout=defaults["timeout"],
-                              host=None, mcp=[], agent_edit=None, model=None, allow_exec=False,
+                              host=None, mcp=[], agent_edit=None, model=None, allow_exec=allow_exec,
                               new_session=new_session)
 
     async def run():
@@ -742,7 +747,9 @@ def main(argv=None) -> int:
                     print("  提示：当前 stdin 不是终端；交互输入请直接在真实终端运行 aiverywhere，"
                           "或使用 aiverywhere chat。", flush=True)
                 elif configured or os.getenv("AIVERYWHERE_MODEL") or os.getenv("ANTHROPIC_MODEL"):
-                    return welcome_chat(store, getattr(args, "new_session", False))
+                    return welcome_chat(store, getattr(args, "new_session", False),
+                                        getattr(args, "root_allow_write", False),
+                                        getattr(args, "root_allow_exec", False))
                 else:
                     print("  aiverywhere › 尚未配置 CLI 模型；运行 aiverywhere setup 后再对话。", flush=True)
             return 0

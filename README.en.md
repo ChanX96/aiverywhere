@@ -191,7 +191,7 @@ The host uses its own model, tools, and permissions.
 
 ### Resident supervisor and Web
 
-The interactive CLI ensures a **single resident supervisor** is running and opens the local Web console. Resume a durable session directly with:
+The interactive CLI ensures a **single resident supervisor** is running and opens the local Web console. Resume a durable session directly, or list recent sessions first with `aiverywhere chat --resume` (without an ID). Inside chat, `/rename <name>` gives the session a readable name.
 
 ```sh
 aiverywhere chat --resume <session-id>
@@ -375,6 +375,10 @@ This runs Python tests, Shell memory tests, and ShellCheck.
 - [Design](docs/development/design.md)
 - [Development guide](docs/development/development.en.md)
 - [Chinese README](README.md)
+
+## Not affiliated
+
+aiverywhere is an independent open-source project. It is not affiliated with or endorsed by Anthropic, OpenAI, Tencent, Feishu, Apple, or any other product or service mentioned here. Names are used only to describe protocol compatibility and integration targets; platform accounts, access, data, and terms remain the responsibility of the user and the bridge.
 
 ## License
 

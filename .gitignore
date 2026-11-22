@@ -17,3 +17,8 @@ htmlcov/
 /config.json
 
 /work/
+/.env
+/.env.*
+/.secrets
+*.pem
+*.p12

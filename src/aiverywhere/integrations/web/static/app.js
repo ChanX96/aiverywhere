@@ -145,9 +145,10 @@ aiverywhere</pre><p class="fine">项目本地实例位于目标项目的 <code>.
 }
 
 function sessionsView() {
-  const rows = (workspace.sessions || []).map(item => `<tr><td class="meta mono">${esc(item.id)}</td><td>${item.turns}</td>
+  const rows = (workspace.sessions || []).map(item => `<tr><td><b>${esc(item.name || "未命名")}</b><div class="meta mono">${esc(item.id)}</div></td><td>${item.turns}</td>
     <td>${item.summary ? "已压实" : "原始"}</td><td class="meta">${date(item.updated)}</td>
-    <td><button class="link" data-action="session-detail" data-id="${esc(item.id)}">查看</button></td></tr>`).join("");
+    <td><button class="link" data-action="session-rename" data-id="${esc(item.id)}" data-name="${esc(item.name || "")}">重命名</button>
+    <button class="link" data-action="session-detail" data-id="${esc(item.id)}">查看</button></td></tr>`).join("");
   return `<section class="panel"><div class="panel-head"><h2>会话与任务</h2><small>${(workspace.sessions || []).length} 个 CLI session</small></div>
     <div class="session-explain"><strong>Session 是持久对话，Task 是一次执行。</strong>
       <p>CLI 每轮任务写入 session；Web 对话是当前 supervisor 进程内的临时会话，刷新或重启后不保证恢复。要长期保留和继续，请使用 CLI session。</p></div>
@@ -680,9 +681,19 @@ async function action(name, button) {
       $("#detail").showModal();
       break;
     }
+    case "session-rename": {
+      const name = prompt("新的 session 名称（1–80 个字符）", button.dataset.name || "");
+      if (name === null) break;
+      try {
+        await api("/api/sessions/" + button.dataset.id + "/rename", "POST", {name});
+        await reload();
+        toast("session 已重命名");
+      } catch (error) { toast(error.message, true); }
+      break;
+    }
     case "session-detail": {
       const data = await api("/api/sessions/" + button.dataset.id);
-      $("#detail-title").textContent = "Session " + data.id.slice(0, 12);
+      $("#detail-title").textContent = (data.name || "未命名") + " · " + data.id.slice(0, 12);
       const transcript = (data.history || []).map(message => {
         const role = message.role || "message";
         const content = typeof message.content === "string" ? message.content : JSON.stringify(message.content);

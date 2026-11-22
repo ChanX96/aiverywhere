@@ -33,6 +33,7 @@
 - CLI 交互改为单会话多轮：连续输入共享同一个 Task 历史和 task_id，`/new` 才显式切换会话；修复退出时 `reader` 为 `None` 的回溯。
 - `web_search` 对日期/年份重的查询自动补一次短查询并按关键词排序；环境摘要加入 now/timezone/network grant，worker 继承审批。
 - 修复 `Tools.execute` 对 `web_search`、`web_fetch`、`run_command` 的分派遗漏；TTY 改为顺序 prompt，任务结束稳定回到 `aiverywhere ›`。
+- session 支持持久名称；`aiverywhere chat --resume` 无 ID 时列出最近会话，Web 会话页可重命名。
 - 运行日志增加 `data/runs/` 详细 trace（提示词、答复、工具参数/截断结果）和 Web `/` 命令菜单。
 - 可靠性修复：旧记忆按项目逐条迁移、共享实例按项目 path key 隔离、完整 skill 随源码/归档/wheel 交付、`jq` 缺失时仍可初始化、默认布局 worker 不递归、Shell/Python 共用校验样本。
 - Web 修复导航和运行记录入口，增加 CLI session 历史/恢复展示、Agent bundle 多文件编辑，并明确单项目空间边界。

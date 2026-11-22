@@ -319,7 +319,8 @@ aiverywhere ›
 | --- | --- |
 | `/help` | 显示帮助 |
 | `/new` | 开始一个新的会话 |
-| `/resume <id>` | 恢复指定 session |
+| `/resume <id>` | 恢复指定 session；`aiverywhere chat --resume` 列出最近会话 |
+| `/rename <name>` | 重命名当前 session |
 | `/sessions` | 列出当前项目的 session |
 | `/status` | 当前 session、turn 数、token 估算 |
 | `/compact` | 手动压实当前上下文 |
@@ -451,6 +452,10 @@ sh tests/shell/memory.sh
 ## 贡献
 
 欢迎提交 Issue 和 PR。涉及行为约定的改动请先阅读 [开发规范](docs/development/development.md)，并同步更新 `skills/aiverywhere/SKILL.md` 和相关验收。
+
+## 非关联声明
+
+aiverywhere 是独立开源项目，不隶属于 Anthropic、OpenAI、腾讯、飞书、Apple 或文中提及的其他产品/服务，也未获得其官方背书。产品名称仅用于说明协议兼容性和接入对象；真实平台接入、账号、数据和条款由使用者及其 bridge 负责。
 
 ## License
 

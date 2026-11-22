@@ -39,6 +39,21 @@ class SessionTest(unittest.TestCase):
         held.release()
         self.sessions.open(session.id).release()
 
+    def test_session_rename_persists_and_is_listed(self):
+        session = self.sessions.create()
+        self.assertIsNone(session.info()["name"])
+        session.rename("发布前检查")
+        self.assertEqual(session.info()["name"], "发布前检查")
+        session.release()
+        rows = self.sessions.list()
+        self.assertEqual(rows[0]["name"], "发布前检查")
+        loaded = self.sessions.open(session.id)
+        loaded.load()
+        self.assertEqual(loaded.display_name(), "发布前检查")
+        loaded.release()
+        with self.assertRaises(ValueError):
+            self.sessions.open(session.id).rename("")
+
     def test_partial_tail_is_ignored_and_repaired(self):
         session = self.sessions.create()
         turn_id = session.begin_turn("first")

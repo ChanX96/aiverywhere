@@ -24,7 +24,7 @@ SESSION_SCHEMA = 1
 SESSION_ID = re.compile(r"^[0-9a-f]{32}$")
 EVENT_LIMIT = 16 * 1024 * 1024
 FILE_LIMIT = 256 * 1024 * 1024
-EVENT_TYPES = {"turn_start", "turn", "turn_error", "summary", "permission"}
+EVENT_TYPES = {"turn_start", "turn", "turn_error", "summary", "permission", "rename"}
 
 
 class SessionError(ValueError):
@@ -247,6 +247,23 @@ class Session:
         self._valid_offset += len(encoded)
         return self._seq
 
+    def rename(self, name: str) -> int:
+        if not isinstance(name, str):
+            raise ValueError("session 名称需要 1–80 个可打印字符")
+        name = name.strip()
+        if not 1 <= len(name) <= 80 or any(ord(char) < 32 for char in name):
+            raise ValueError("session 名称需要 1–80 个可打印字符")
+        return self._append("rename", name=name, task_id=self.id)
+
+    def display_name(self) -> str | None:
+        self.load()
+        for event in reversed(self.events):
+            if event.get("type") == "rename":
+                value = event.get("name")
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return None
+
     def begin_turn(self, prompt: str) -> str:
         turn_id = uuid4().hex
         self._append("turn_start", turn_id=turn_id, prompt=prompt, task_id=self.id)
@@ -299,6 +316,7 @@ class Session:
         summary = self.summary()
         return {
             "id": self.id,
+            "name": self.display_name(),
             "created": self.header.get("created"),
             "updated": self.events[-1].get("created") if self.events else self.header.get("created"),
             "turns": len(self.turns()),

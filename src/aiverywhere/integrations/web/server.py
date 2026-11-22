@@ -73,6 +73,7 @@ ASSETS = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"),
           "/app.js": ("app.js", "text/javascript")}
 ENTRY_PATH = re.compile(r"/api/memory/([0-9a-f]{32})")
 SESSION_PATH = re.compile(r"/api/sessions/([0-9a-f]{32})\Z")
+SESSION_RENAME_PATH = re.compile(r"/api/sessions/([0-9a-f]{32})/rename\Z")
 RUN_PATH = re.compile(r"/api/runs/([A-Za-z0-9_-]{1,200})\Z")
 CHANNEL_PATH = re.compile(r"/api/channels/([A-Za-z0-9_-]{1,64})/(messages|status)\Z")
 
@@ -160,7 +161,7 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
                 bundle = hashlib.sha256(repr(
                     [(item["path"], item["sha256"]) for item in store.agent_files()]).encode()).hexdigest()
                 sessions = hashlib.sha256(repr(
-                    [(item["id"], item["updated"], item["turns"])
+                    [(item["id"], item.get("name"), item["updated"], item["turns"])
                      for item in SessionStore(store).list()]).encode()).hexdigest()
                 bridges = hashlib.sha256(repr(
                     [(item["id"], item["path"], item["enabled"])
@@ -197,6 +198,19 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
                     return self.reply(404, {"error": str(exc)})
             if read and path == "/api/sessions":
                 return self.reply(200, {"sessions": SessionStore(store).list()})
+            rename_match = SESSION_RENAME_PATH.fullmatch(path)
+            if rename_match and self.command == "POST":
+                ident = rename_match[1]
+                data = self.body()
+                if not isinstance(data.get("name"), str):
+                    raise ValueError("session 名称需要文本")
+                session = SessionStore(store).open(ident)
+                session.acquire()
+                try:
+                    session.rename(data["name"])
+                    return self.reply(200, session.info())
+                finally:
+                    session.release()
             if read and SESSION_PATH.fullmatch(path):
                 ident = SESSION_PATH.fullmatch(path)[1]
                 try:

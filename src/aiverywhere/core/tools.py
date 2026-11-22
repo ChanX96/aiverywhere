@@ -9,7 +9,7 @@ import re
 import signal
 import socket
 import subprocess
-import xml.etree.ElementTree as ElementTree
+from defusedxml import ElementTree
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, urljoin, urlsplit

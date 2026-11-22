@@ -161,9 +161,10 @@ Retrying the same request ID in the same project returns the original task recei
 
 ### CLI sessions and automatic compaction
 
-The interactive CLI resumes the latest session for the project by default. Resume a specific session directly with:
+The interactive CLI resumes the latest session for the project by default. Resume a specific session, or list recent sessions first, with:
 
 ```sh
+aiverywhere chat --resume            # list the 10 most recent sessions and choose
 aiverywhere chat --resume <session-id>
 ```
 
@@ -177,8 +178,9 @@ Commands:
 
 ```text
 /new                 start a new session
+/rename <name>       rename the current session
 /resume <session-id> resume a specific session
-/sessions            list project sessions
+/sessions            list project sessions with names and update times
 /status              show session, turns, token estimate, and summary state
 /compact             manually compact the current context
 ```

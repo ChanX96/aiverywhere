@@ -101,7 +101,8 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--task-id", help="宿主分配的请求 ID，同一项目的重复请求返回已有回执")
     chat = sub.add_parser("chat", help="交互式 CLI，一次推进一个前台任务，可 /cancel")
     chat.add_argument("--new", dest="new_session", action="store_true", default=argparse.SUPPRESS, help="开始新的 CLI session")
-    chat.add_argument("--resume", metavar="ID", default=None, help="恢复指定 CLI session 后进入交互")
+    chat.add_argument("--resume", nargs="?", const="", metavar="ID", default=None,
+                      help="恢复 CLI session；省略 ID 时列出最近会话")
     chat.add_argument("--ask-permissions", dest="ask_permissions", action="store_true",
                       default=argparse.SUPPRESS, help="对写文件和命令逐次询问")
     chat.add_argument("--no-network", dest="no_network", action="store_true",
@@ -260,6 +261,7 @@ SLASH_COMMANDS = (
     ("/help", "显示帮助"),
     ("/new", "开始一个新的会话"),
     ("/resume", "恢复指定 session：/resume <id>"),
+    ("/rename", "重命名当前 session：/rename <name>"),
     ("/sessions", "列出当前项目的 session"),
     ("/status", "当前 session 和上下文预算"),
     ("/compact", "手动压实当前上下文"),
@@ -421,6 +423,13 @@ async def chat(args, store: Store, provider) -> int:
             result = result | {"answer": ""}
         emit(event="result", **result)
 
+    def session_lines(rows: list[dict]) -> str:
+        return "\n".join(
+            f"{index}. {row.get('name') or '(未命名)'}  {row['id']}  "
+            f"turns={row['turns']}  {row.get('updated', '')}  "
+            f"{'pending' if row['pending'] else ''}"
+            for index, row in enumerate(rows, 1))
+
     async def run_turn(candidate: Task, prompt: str):
         nonlocal current
         history_before = len(candidate.history)
@@ -499,7 +508,7 @@ async def chat(args, store: Store, provider) -> int:
 
     help_text = ("多轮会话：每行续接当前 session，输入 / 显示命令菜单。"
                  "/help 帮助、/new 新会话、/resume 恢复、/sessions 列表、"
-                 "/compact 压实、/permissions 权限、/grant 或 /revoke 授权、"
+                 "/compact 压实、/rename 重命名、/permissions 权限、/grant 或 /revoke 授权、"
                  "/approve 或 /deny 处理权限请求、/status 状态、"
                  "/jobs 任务、/cancel 取消、/ask 追问、/quit 退出。")
 
@@ -535,8 +544,34 @@ async def chat(args, store: Store, provider) -> int:
     except (NotImplementedError, RuntimeError):
         pass
     try:
-        if getattr(args, "resume", None):
-            open_session(ident=args.resume)
+        resume = getattr(args, "resume", None)
+        if resume is not None:
+            if resume:
+                open_session(ident=resume)
+            else:
+                rows = sessions.list()[:10]
+                if not rows:
+                    message("当前项目还没有 session；开始新会话。")
+                    open_session(new=True)
+                else:
+                    message("最近的 session：\n" + session_lines(rows))
+                    if prompt_ui is not None and not args.json:
+                        try:
+                            choice = (await prompt_ui.prompt_async(
+                                "选择 session 序号、ID，或回车恢复最近 › ")).strip()
+                        except (EOFError, KeyboardInterrupt):
+                            choice = ""
+                        if choice.lower() in {"q", "quit"}:
+                            return 0
+                        if not choice:
+                            open_session()
+                        elif choice.isdigit() and 1 <= int(choice) <= len(rows):
+                            open_session(ident=rows[int(choice) - 1]["id"])
+                        else:
+                            open_session(ident=choice)
+                    else:
+                        message("非交互模式请使用 --resume <session-id>。")
+                        return 2
         else:
             open_session(new=bool(getattr(args, "new_session", False)))
         while not quitting:
@@ -591,17 +626,27 @@ async def chat(args, store: Store, provider) -> int:
                 if not rows:
                     message("当前项目还没有 session。")
                 else:
-                    text = "\n".join(
-                        f"{row['id']}  turns={row['turns']}  {'pending' if row['pending'] else ''}  "
-                        f"summary={row['summary_method'] or '-'}" for row in rows[:20])
-                    message(text)
+                    message("最近的 session：\n" + session_lines(rows[:20]))
+                continue
+            if line == "/rename":
+                message("用法：/rename <name>")
+                continue
+            if line.startswith("/rename "):
+                if session is None:
+                    message("当前没有可重命名的 session。")
+                else:
+                    try:
+                        session.rename(line.split(maxsplit=1)[1])
+                        message(f"session 已重命名为：{session.display_name()}")
+                    except (OSError, ValueError) as exc:
+                        message(f"重命名失败：{exc}")
                 continue
             if line == "/status":
                 assert session is not None and task is not None and manager is not None
                 info = session.info()
                 tokens = manager.estimate(task.instructions({}), task.history,
                                           list(task.tools.active.values()))
-                message(f"session={info['id']} turns={info['turns']} pending={info['pending']} "
+                message(f"session={info['id']} name={info.get('name') or '-'} turns={info['turns']} pending={info['pending']} "
                         f"summary={info['summary_method'] or '-'} tokens~{tokens}/{manager.max_tokens} "
                         f"write={grants['write']} exec={grants['exec']} network={grants['network']}")
                 continue

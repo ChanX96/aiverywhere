@@ -395,7 +395,12 @@ class Smoke(unittest.TestCase):
             page = web.get("/")
             web.headers["X-Aiverywhere-Token"] = re.search(
                 r'name="session" content="([^"]+)"', page.text)[1]
+            renamed = web.post("/api/sessions/" + session.id + "/rename",
+                               json={"name": "Web 历史验收"})
+            self.assertEqual(renamed.status_code, 200, renamed.text)
+            self.assertEqual(renamed.json()["name"], "Web 历史验收")
             workspace = web.get("/api/workspace").json()
+            self.assertEqual(workspace["sessions"][0]["name"], "Web 历史验收")
             files = {item["path"]: item for item in workspace["agent"]["files"]}
             self.assertIn("references/web-test.md", files)
             self.assertEqual(workspace["sessions"][0]["id"], session.id)

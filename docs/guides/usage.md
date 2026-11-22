@@ -161,9 +161,10 @@ printf '%s\n' '读 README，返回启动命令和依据。' |
 
 ### CLI session 与自动 compaction
 
-交互式 CLI 默认恢复当前项目最近的 session；也可以直接恢复指定 session：
+交互式 CLI 默认恢复当前项目最近的 session；也可以恢复指定 session，或先列出最近会话再选择：
 
 ```sh
+aiverywhere chat --resume            # 列出最近 10 个 session 并交互选择
 aiverywhere chat --resume <session-id>
 ```
 
@@ -177,8 +178,9 @@ aiverywhere chat --resume <session-id>
 
 ```text
 /new                 新 session
+/rename <name>       重命名当前 session
 /resume <session-id> 恢复指定 session
-/sessions            列出当前项目 session
+/sessions            列出当前项目 session（含名称和最近更新时间）
 /status              session、turn 数、token 估算和摘要状态
 /compact             手动压实当前上下文
 ```

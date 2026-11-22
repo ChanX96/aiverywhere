@@ -1,0 +1,75 @@
+---
+name: aiverywhere
+description: 在任意宿主或终端中处理代码、文档和日常任务；用宿主自己的模型和工具工作，按需读取项目记忆、线索和可选 worker。
+---
+
+# aiverywhere 的工作约定
+
+用当前环境中最简单、可验证的方法完成目标。由你决定行动顺序，不要把“安装 CLI”当成使用前提。
+
+## 核心工作流
+
+1. **明确目标**：用户要什么、有哪些输入、什么算完成。
+2. **发现能力**：读取 skill 目录的 `runtime.json`，或项目的 `.aiverywhere/instance.json`；确认是否能读写文件、执行命令、使用网络、委派子 agent、取消任务。
+3. **按需记忆**：只有当前任务需要时才读取本项目记忆或技能；没有相关记录就直接工作。
+4. **行动并验证**：使用宿主自己的工具或当前环境中获准的命令；结果要有证据，不以“应该成功”代替实际回执。
+5. **留下结果**：需要长期保留的事实、技能或线索写入 memory；任务结果、产物和验证依据交回用户。
+
+简单问题直接回答。创作任务留出新思路的空间。不要为了展示流程而增加模型轮数。
+
+## 运行时
+
+- 宿主和 CLI 是同一个行为约定，只是拥有循环的一方不同。
+- 宿主使用自己的模型、文件工具、命令、子 agent 和取消机制。
+- CLI 是可选入口；安装后才提供本地模型循环、Web、worker 和调度。
+- Skill 不需要 Python。记忆操作使用 `scripts/` 下的 POSIX Shell。
+- 需要细节时读取：
+  - [运行时与实例绑定](references/runtime.md)
+  - [记忆格式与校验](references/memory.md)
+  - [工具与权限](references/tools.md)
+  - [委派 worker](references/workers.md)
+  - [外部唤醒与渠道](references/channels.md)
+
+## 记忆
+
+项目实例默认在 `.aiverywhere/`，使用 `data/memory/<project_key>/` 下的一条记录一个 JSON 文件。不要直接编辑 `state.json`；它只保存计划、任务和渠道回执。
+
+常用命令：
+
+```sh
+sh <skill>/scripts/list-memory.sh --kind clue
+sh <skill>/scripts/read-memory.sh <id>
+sh <skill>/scripts/write-memory.sh --kind fact --title '标题' --text '正文' --source <任务ID>
+sh <skill>/scripts/validate-memory.sh < record.json
+```
+
+规则：
+
+- 记录必须符合 `references/memory-v1.schema.json`；
+- 修改已有记录必须核对旧 `revision`；
+- 没有 `jq` 时使用宿主原生的结构化校验，或返回“已写入，格式待校验”；
+- 无法访问共享记忆时明确说明，不要假装记得；
+- 记忆、产物和日志留在绑定实例内，不写到实例之外。
+
+## 主动行为
+
+会话中主动验证、记录纠正、留下线索。没有新任务时，或下一次激活 skill 时，查询 `kind=clue`：
+
+- 没有线索：直接结束，不调用模型；
+- 有线索：用自己的模型判断证据是否足够，写 fact/skill 或保留线索。
+
+关闭会话后能否到点执行，取决于是否有真实可用的唤醒方。有宿主调度能力时由宿主执行；没有时下次激活提醒。不要伪造后台执行或送达。
+
+## 工具与委派
+
+- 宿主使用自己的文件、命令、网页和子 agent 工具。
+- 需要本地文件工具时，可按当前环境安装 CLI；文件写入、命令执行和网络访问分别需要显式授权。
+- 只有存在 1–2 个真正独立、可并行的子目标时才委派 worker；简单或有依赖的任务直接完成。
+- worker 的私有工作区、artifact 和取消规则见 [workers](references/workers.md)。
+- 同一用户跨项目复用技能时，先去掉客户资料，保留验证依据。
+
+## 交付
+
+- 给出结果、关键证据、产物位置和未验证项。
+- 失败时说明具体原因：权限、网络、超时、格式、冲突或缺少运行环境。
+- 不把“没有查到”包装成“没有结果”；不把“已写入”包装成“已校验保存”。

@@ -1,0 +1,79 @@
+[project]
+name = "aiverywhere"
+dynamic = ["version"]
+description = "A small, portable agent for host sessions and the terminal"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "ChanX96"}]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["agent", "anthropic", "cli", "mcp", "personal-assistant"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Utilities",
+]
+dependencies = ["httpx>=0.27,<1"]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.20,<2; python_version >= '3.10'"]
+dev = ["build>=1.2,<2", "ruff>=0.8,<1"]
+
+[project.scripts]
+aiverywhere = "aiverywhere.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ChanX96/aiverywhere"
+Documentation = "https://github.com/ChanX96/aiverywhere/blob/main/docs/guides/usage.md"
+Repository = "https://github.com/ChanX96/aiverywhere"
+Issues = "https://github.com/ChanX96/aiverywhere/issues"
+Changelog = "https://github.com/ChanX96/aiverywhere/blob/main/CHANGELOG.md"
+"English README" = "https://github.com/ChanX96/aiverywhere/blob/main/README.en.md"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/aiverywhere/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aiverywhere"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"skills/aiverywhere/SKILL.md" = "aiverywhere/SKILL.md"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/docs",
+  "/skills",
+  "/AGENTS.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/Makefile",
+  "/README.en.md",
+  "/README.md",
+  "/install.sh",
+  "/pyproject.toml",
+]
+exclude = ["/config.json", "/data", "/work"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W"]

@@ -1,0 +1,76 @@
+name: 缺陷报告
+description: 报告可复现的问题
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先搜索已有 Issue，并使用合成资料复现。不要粘贴 API Key、微信内容、个人路径或 `data/` 下的真实数据。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 Issue
+          required: true
+        - label: 我已阅读安装和使用文档
+          required: true
+        - label: 我已移除凭据、个人数据和可识别日志
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 运行 `aiverywhere --version` 的结果
+      placeholder: aiverywhere 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: 安装方式
+      options:
+        - install.sh 宿主安装
+        - install.sh --cli
+        - 源码虚拟环境
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      description: 操作系统、架构、Python 版本、宿主 agent
+      placeholder: macOS 15 arm64 / Python 3.12 / 任意宿主
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际发生了什么
+      description: 包含完整错误信息和任务回执（已脱敏）
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从安装或 `init` 后开始的最小步骤
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 其他上下文
+      description: 相关配置（脱敏）、日志片段、是否复现

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChanX96/aiverywhere/memory-v1.schema.json",
+  "title": "aiverywhere memory v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "revision", "kind", "title", "text", "source", "updated"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "revision": {"type": "integer", "minimum": 1},
+    "kind": {"type": "string", "enum": ["fact", "skill", "clue"]},
+    "title": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "\\S"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 8000, "pattern": "\\S"},
+    "source": {"type": "string", "minLength": 1, "maxLength": 200},
+    "updated": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "shared": {"type": "boolean"}
+  }
+}

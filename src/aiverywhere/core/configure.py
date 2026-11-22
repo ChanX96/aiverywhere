@@ -17,7 +17,10 @@ from urllib.parse import urlsplit
 from .store import Store, atomic_write, checked_defaults
 
 OFFICIAL = "https://api.anthropic.com"
+OPENAI = "https://api.openai.com/v1"
+OLLAMA = "http://127.0.0.1:11434/v1"
 MAX_TOKENS = 4096
+PROTOCOLS = {"anthropic", "openai", "ollama", "custom"}
 CREDENTIAL_FIELDS = ("api_key", "auth_token", "api_key_env", "auth_token_env")
 
 
@@ -178,19 +181,35 @@ def _ask_credential(prompt: Prompter, existing: dict, official: bool, *, keep_ex
 
 
 def _ask_model(prompt: Prompter, existing: dict, *, model, base_url, max_tokens,
-               api_key, auth_token, api_key_env, auth_token_env) -> dict:
-    existing_base = existing.get("base_url") or OFFICIAL
-    proposed_base = check_url(base_url or existing_base or environment_base() or OFFICIAL)
-    default_service = "1" if is_official(proposed_base) else "2"
-    service = prompt.choice("模型服务", [
-        ("1", f"Anthropic 官方（{OFFICIAL}）"),
-        ("2", "自定义 Messages 兼容端点"),
-    ], default_service)
-    if service == "1":
-        base = OFFICIAL
+               api_key, auth_token, api_key_env, auth_token_env, protocol=None,
+               chat_path=None) -> dict:
+    current_protocol = existing.get("protocol", "anthropic")
+    default_protocol = protocol or current_protocol
+    choice = prompt.choice("模型协议", [
+        ("1", "Anthropic Messages"),
+        ("2", "OpenAI Chat Completions"),
+        ("3", "Ollama"),
+        ("4", "Custom OpenAI-compatible"),
+    ], str({"anthropic": 1, "openai": 2, "ollama": 3, "custom": 4}.get(default_protocol, 1)))
+    selected_protocol = {"1": "anthropic", "2": "openai", "3": "ollama", "4": "custom"}[choice]
+    default_base = {"anthropic": OFFICIAL, "openai": OPENAI, "ollama": OLLAMA,
+                    "custom": "http://127.0.0.1:8000/v1"}[selected_protocol]
+    existing_base = existing.get("base_url") if current_protocol == selected_protocol else default_base
+    proposed_base = check_url(base_url or existing_base or environment_base() or default_base)
+    if selected_protocol == "anthropic":
+        default_service = "1" if is_official(proposed_base) else "2"
+        service = prompt.choice("模型服务", [
+            ("1", f"Anthropic 官方（{OFFICIAL}）"),
+            ("2", "自定义 Messages 兼容端点"),
+        ], default_service)
+        if service == "1":
+            base = OFFICIAL
+        else:
+            base = check_url(prompt.text("模型服务地址",
+                                         default=proposed_base if not is_official(proposed_base) else "http://127.0.0.1:8000",
+                                         required=True))
     else:
-        base = check_url(prompt.text("模型服务地址",
-                                     default=proposed_base if not is_official(proposed_base) else "http://127.0.0.1:8000",
+        base = check_url(prompt.text("模型服务地址", default=proposed_base,
                                      required=True))
     name = prompt.text("模型名称", default=model or existing.get("model") or environment_model(), required=True)
     changed_endpoint = base.rstrip("/") != (existing.get("base_url") or OFFICIAL).rstrip("/")
@@ -199,8 +218,14 @@ def _ask_model(prompt: Prompter, existing: dict, *, model, base_url, max_tokens,
         credential = _ask_credential(prompt, existing, is_official(base),
                                      keep_existing=not changed_endpoint)
     section = {"model": name}
-    if not is_official(base):
+    if selected_protocol != "anthropic":
+        section["protocol"] = selected_protocol
+    if not is_official(base) or selected_protocol != "anthropic":
         section["base_url"] = base
+    if chat_path:
+        if not chat_path.startswith("/"):
+            raise ValueError("chat_path 需要以 / 开头")
+        section["chat_path"] = chat_path
     section.update(credential)
     suggested_tokens = max_tokens or existing.get("max_tokens") or MAX_TOKENS
     if type(suggested_tokens) is not int or suggested_tokens <= 0:
@@ -212,13 +237,20 @@ def _ask_model(prompt: Prompter, existing: dict, *, model, base_url, max_tokens,
 
 
 def _noninteractive_model(existing: dict, *, model, base_url, max_tokens,
-                          api_key, auth_token, api_key_env, auth_token_env) -> dict:
-    if "command" in existing and not _flags(model, base_url, api_key, auth_token, api_key_env, auth_token_env, max_tokens):
+                          api_key, auth_token, api_key_env, auth_token_env, protocol=None,
+                          chat_path=None) -> dict:
+    if "command" in existing and not _flags(model, base_url, api_key, auth_token, api_key_env, auth_token_env,
+                                            max_tokens, protocol, chat_path):
         return dict(existing)
     name = model or existing.get("model") or environment_model()
     if not name:
         raise ValueError("请用 --model 或 AIVERYWHERE_MODEL 指定模型；也可交互运行 aiverywhere setup")
-    base = check_url(base_url or existing.get("base_url") or environment_base() or OFFICIAL)
+    selected_protocol = protocol or existing.get("protocol", "anthropic")
+    if selected_protocol not in PROTOCOLS:
+        raise ValueError("protocol 支持 anthropic、openai、ollama 或 custom")
+    default_base = {"anthropic": OFFICIAL, "openai": OPENAI, "ollama": OLLAMA,
+                    "custom": "http://127.0.0.1:8000/v1"}[selected_protocol]
+    base = check_url(base_url or existing.get("base_url") or environment_base() or default_base)
     credential = _credential_flag(api_key, auth_token, api_key_env, auth_token_env)
     changed_endpoint = base.rstrip("/") != (existing.get("base_url") or OFFICIAL).rstrip("/")
     if not credential:
@@ -232,8 +264,14 @@ def _noninteractive_model(existing: dict, *, model, base_url, max_tokens,
     if type(tokens) is not int or tokens <= 0:
         raise ValueError("max_tokens 需要正整数")
     section = {"model": name}
-    if not is_official(base):
+    if selected_protocol != "anthropic":
+        section["protocol"] = selected_protocol
+    if not is_official(base) or selected_protocol != "anthropic":
         section["base_url"] = base
+    if chat_path:
+        if not chat_path.startswith("/"):
+            raise ValueError("chat_path 需要以 / 开头")
+        section["chat_path"] = chat_path
     section.update(credential)
     if tokens != MAX_TOKENS:
         section["max_tokens"] = tokens
@@ -263,8 +301,12 @@ def _summary(path: Path, model: dict, defaults: dict) -> dict:
     if "command" in model:
         description = {"executor": "native", "command": model["command"]}
     else:
-        description = {"executor": "messages", "name": model.get("model"),
-                       "base_url": model.get("base_url", OFFICIAL),
+        protocol = model.get("protocol", "anthropic")
+        default_base = {"anthropic": OFFICIAL, "openai": OPENAI, "ollama": OLLAMA,
+                        "custom": "http://127.0.0.1:8000/v1"}[protocol]
+        description = {"executor": "messages", "protocol": protocol,
+                       "name": model.get("model"),
+                       "base_url": model.get("base_url", default_base),
                        "credential": next((key for key in CREDENTIAL_FIELDS if model.get(key)), None),
                        "max_tokens": model.get("max_tokens", MAX_TOKENS)}
     return {"config": str(path), "model": description, "defaults": defaults}
@@ -273,7 +315,7 @@ def _summary(path: Path, model: dict, defaults: dict) -> dict:
 def configure(store: Store, *, interactive: bool | None = None, no_input: bool = False,
               model=None, base_url=None, api_key=None, auth_token=None,
               api_key_env=None, auth_token_env=None, max_tokens=None,
-              max_turns=None, timeout=None, port=None) -> dict:
+              max_turns=None, timeout=None, port=None, protocol=None, chat_path=None) -> dict:
     """Collect configuration and publish it atomically. Secrets are never returned."""
     if no_input:
         interactive = False
@@ -286,13 +328,15 @@ def configure(store: Store, *, interactive: bool | None = None, no_input: bool =
     current = store.configuration()
     existing = current.get("model", {})
     base_defaults = store.defaults()
-    model_flags = _flags(model, base_url, api_key, auth_token, api_key_env, auth_token_env, max_tokens)
+    model_flags = _flags(model, base_url, api_key, auth_token, api_key_env, auth_token_env,
+                         max_tokens, protocol, chat_path)
     runtime_flags = _flags(max_turns, timeout, port)
 
     if not interactive:
         selected = _noninteractive_model(
             existing, model=model, base_url=base_url, max_tokens=max_tokens,
-            api_key=api_key, auth_token=auth_token, api_key_env=api_key_env, auth_token_env=auth_token_env)
+            api_key=api_key, auth_token=auth_token, api_key_env=api_key_env, auth_token_env=auth_token_env,
+            protocol=protocol, chat_path=chat_path)
         defaults = _runtime_defaults(base_defaults, max_turns=max_turns, timeout=timeout, port=port)
         path = _write_config(store, selected, defaults)
         return _summary(path, selected, defaults)
@@ -303,14 +347,16 @@ def configure(store: Store, *, interactive: bool | None = None, no_input: bool =
         keep_native = prompt.confirm("当前使用原生执行器，保留它并只调整运行参数？", True)
         selected = dict(existing) if keep_native else _ask_model(
             prompt, {}, model=model, base_url=base_url, max_tokens=max_tokens,
-            api_key=api_key, auth_token=auth_token, api_key_env=api_key_env, auth_token_env=auth_token_env)
+            api_key=api_key, auth_token=auth_token, api_key_env=api_key_env, auth_token_env=auth_token_env,
+            protocol=protocol, chat_path=chat_path)
     else:
         reconfigure = model_flags or not existing.get("model")
         if not reconfigure:
             reconfigure = prompt.confirm(f"已配置模型 {existing.get('model')}，重新配置连接？", False)
         selected = _ask_model(
             prompt, existing, model=model, base_url=base_url, max_tokens=max_tokens,
-            api_key=api_key, auth_token=auth_token, api_key_env=api_key_env, auth_token_env=auth_token_env
+            api_key=api_key, auth_token=auth_token, api_key_env=api_key_env, auth_token_env=auth_token_env,
+            protocol=protocol, chat_path=chat_path
         ) if reconfigure else dict(existing)
 
     defaults = dict(base_defaults)

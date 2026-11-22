@@ -171,6 +171,40 @@ Point the host at the project skill:
 
 The host uses its own model, tools, and permissions.
 
+### Model protocols
+
+The CLI supports four protocols:
+
+| Protocol | Use | Default URL |
+| --- | --- | --- |
+| `anthropic` | Anthropic Messages (default) | `https://api.anthropic.com` |
+| `openai` | OpenAI Chat Completions | `https://api.openai.com/v1` |
+| `ollama` | Local Ollama OpenAI-compatible API | `http://127.0.0.1:11434/v1` |
+| `custom` | Custom OpenAI-compatible gateway | `base_url` required |
+
+```sh
+aiverywhere setup --protocol openai --model gpt-4.1 --api-key "$OPENAI_API_KEY"
+aiverywhere setup --no-input --protocol ollama --model llama3.2
+aiverywhere setup --protocol custom --model local-model \
+  --base-url http://127.0.0.1:8000/v1 --chat-path /v1/chat/completions
+```
+
+Custom headers can be set in the instance `config.json`:
+
+```json
+{
+  "model": {
+    "protocol": "custom",
+    "model": "local-model",
+    "base_url": "http://127.0.0.1:8000/v1",
+    "chat_path": "/v1/chat/completions",
+    "headers": {"X-Provider": "local"}
+  }
+}
+```
+
+`custom` uses the OpenAI Chat Completions shape; tool calls, streaming, and errors behave like the OpenAI adapter.
+
 ### Interactive CLI
 
 ```sh

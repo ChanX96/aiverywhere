@@ -78,6 +78,9 @@ def _model_description(model: dict) -> str:
     if not model:
         return "未配置；CLI 模式请运行 aiverywhere setup"
     description = model.get("model") or "未配置"
+    protocol = model.get("protocol", "anthropic")
+    if protocol != "anthropic":
+        description += f"  [{protocol}]"
     if model.get("base_url"):
         host = urlsplit(model["base_url"]).hostname
         if host:

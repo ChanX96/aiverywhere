@@ -59,6 +59,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("init", help="在安装根 data/ 中准备活动 agent 和统一配置，保留已有数据")
     setup = sub.add_parser("setup", help="交互或非交互地写入模型与运行参数")
     setup.add_argument("--no-input", action="store_true", help="不提问，使用参数、环境变量和默认值")
+    setup.add_argument("--protocol", choices=("anthropic", "openai", "ollama", "custom"),
+                       help="模型协议：Anthropic Messages、OpenAI Chat Completions、Ollama 或 custom")
+    setup.add_argument("--chat-path", help="自定义 Chat Completions 路径，例如 /v1/chat/completions")
     setup.add_argument("--model", help="模型名称（或 AIVERYWHERE_MODEL / ANTHROPIC_MODEL）")
     setup.add_argument("--base-url", help="Messages 端点（默认 https://api.anthropic.com）")
     credentials = setup.add_mutually_exclusive_group()
@@ -880,7 +883,7 @@ def main(argv=None) -> int:
                 api_key=args.api_key, auth_token=args.auth_token,
                 api_key_env=args.api_key_env, auth_token_env=args.auth_token_env,
                 max_tokens=args.max_tokens, max_turns=args.max_turns, timeout=args.timeout,
-                port=args.port))
+                port=args.port, protocol=args.protocol, chat_path=args.chat_path))
             return 0
         if args.command == "link":
             print_json(store.link_agent(args.dir))

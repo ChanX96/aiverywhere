@@ -10,6 +10,24 @@ aiverywhere env
 aiverywhere skill --info
 ```
 
+## 模型协议
+
+`model.protocol` 可选：
+
+- `anthropic`：Anthropic Messages，默认；
+- `openai`：OpenAI Chat Completions；
+- `ollama`：Ollama 的 OpenAI 兼容接口，默认 `http://127.0.0.1:11434/v1`；
+- `custom`：自定义 OpenAI 兼容网关，必须提供 `base_url`，可用 `chat_path` 和 `headers`。
+
+```sh
+aiverywhere setup --protocol openai --model gpt-4.1 --api-key "$OPENAI_API_KEY"
+aiverywhere setup --no-input --protocol ollama --model llama3.2
+aiverywhere setup --protocol custom --model local \
+  --base-url http://127.0.0.1:8000/v1 --chat-path /v1/chat/completions
+```
+
+`custom.headers` 只应放非敏感或必要的自定义头；凭据仍使用 `api_key` / `auth_token` 或其环境变量引用，并保持 `config.json` 为 `0600`。
+
 ## 统一配置
 
 `init` 在安装根创建唯一配置 `config.json`。`setup` 写入模型与运行参数，保留 `mcpServers` 和 `wechat`；未知分区一律报错。

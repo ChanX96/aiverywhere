@@ -217,6 +217,19 @@ aiverywhere 启动或从休眠恢复时，按当前用户核对上次检查以�
 
 源码或专用虚拟环境内可以直接运行，使用共享 Python 时显式选择 `--home`。默认启动、读取 skill、查看环境以及 `wake` 均不注册系统服务。安装器只在用户选择的安装根写入虚拟环境、`config.json`、`data/` 和可回收的 `work/`，并可选创建一个 `~/.local/bin` 命令链接和一个项目技能链接；不请求 `sudo`，不修改 shell 启动文件，不写入 cron、launchd 或 systemd 注册文件。已有宿主可按路径读取文件，用户无需全局安装 skill。外部调度器由用户自行管理；后台运行所需的凭据及宿主自身的缓存、日志与权限由该宿主配置管理。
 
+### 模型协议适配
+
+模型边界只负责把内部 Anthropic 形状的消息、工具和流式事件转换为服务商协议；agent 循环、session、compaction 和权限不随协议分叉。
+
+| protocol | 用途 |
+| --- | --- |
+| `anthropic` | Anthropic Messages，默认 |
+| `openai` | OpenAI Chat Completions |
+| `ollama` | Ollama 的 OpenAI 兼容 API |
+| `custom` | 自定义 OpenAI 兼容网关，可配 `base_url`、`chat_path`、`headers` |
+
+协议适配器只依赖 `httpx`，不引入新的模型 SDK。工具调用、流式文本和错误状态仍由同一个 `Messages.agentloop` 驱动。
+
 ### 稳定内核与数据驱动能力
 
 内核只保留四类稳定机制：一次任务循环、受版本约束的工具协议、可校验的记忆格式，以及可恢复的 session/journal。能力优先通过数据扩展：

@@ -73,7 +73,7 @@ class Configure(unittest.TestCase):
                 configure(self.store, no_input=True, model="demo")
 
     def test_interactive_defaults_and_runtime_override(self):
-        inputs = ["", "demo-model", "", "", "y", "6", "", "", ""]
+        inputs = ["", "", "demo-model", "", "", "y", "6", "", "", ""]
         with patch("builtins.input", side_effect=inputs), patch("getpass.getpass", return_value="secret"), \
                 redirect_stdout(io.StringIO()):
             configure(self.store, interactive=True)
@@ -103,6 +103,13 @@ class Configure(unittest.TestCase):
         self.assertEqual(commands, {"/help", "/new", "/resume", "/sessions", "/status", "/compact", "/permissions", "/grant", "/revoke", "/approve", "/deny", "/jobs", "/cancel", "/ask", "/quit"})
         self.assertEqual({command for command, _ in _slash_matches("/")}, commands)
         self.assertEqual([command for command, _ in _slash_matches("/he")], ["/help"])
+
+    def test_setup_protocol_flags_parse(self):
+        from aiverywhere.cli.main import parser
+        args = parser().parse_args(["setup", "--protocol", "openai",
+                                    "--chat-path", "/v1/chat/completions"])
+        self.assertEqual(args.protocol, "openai")
+        self.assertEqual(args.chat_path, "/v1/chat/completions")
 
     def test_root_interactive_permission_flags_parse(self):
         from aiverywhere.cli.main import parser

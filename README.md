@@ -221,6 +221,42 @@ aiverywhere skill --info
 
 宿主使用自己的模型、工具和权限；`aiverywhere` 只提供行为约定和记忆协议。
 
+### 模型协议
+
+CLI 支持四种协议：
+
+| 协议 | 用法 | 默认地址 |
+| --- | --- | --- |
+| `anthropic` | Anthropic Messages，默认 | `https://api.anthropic.com` |
+| `openai` | OpenAI Chat Completions | `https://api.openai.com/v1` |
+| `ollama` | 本地 Ollama 的 OpenAI 兼容接口 | `http://127.0.0.1:11434/v1` |
+| `custom` | 自定义 OpenAI 兼容网关 | 需提供 `base_url` |
+
+示例：
+
+```sh
+aiverywhere setup --protocol openai --model gpt-4.1 --api-key "$OPENAI_API_KEY"
+aiverywhere setup --no-input --protocol ollama --model llama3.2
+aiverywhere setup --protocol custom --model local-model \
+  --base-url http://127.0.0.1:8000/v1 --chat-path /v1/chat/completions
+```
+
+自定义请求头可直接写入实例 `config.json`：
+
+```json
+{
+  "model": {
+    "protocol": "custom",
+    "model": "local-model",
+    "base_url": "http://127.0.0.1:8000/v1",
+    "chat_path": "/v1/chat/completions",
+    "headers": {"X-Provider": "local"}
+  }
+}
+```
+
+`custom` 走 OpenAI Chat Completions 形状；工具调用、流式输出和错误处理与 OpenAI 相同。
+
 ### 交互式 CLI
 
 ```sh

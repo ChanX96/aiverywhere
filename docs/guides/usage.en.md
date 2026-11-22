@@ -10,6 +10,24 @@ aiverywhere env
 aiverywhere skill --info
 ```
 
+## Model protocols
+
+`model.protocol` can be:
+
+- `anthropic`: Anthropic Messages, the default;
+- `openai`: OpenAI Chat Completions;
+- `ollama`: Ollama's OpenAI-compatible API, default `http://127.0.0.1:11434/v1`;
+- `custom`: custom OpenAI-compatible gateway, requiring `base_url` and optionally `chat_path` and `headers`.
+
+```sh
+aiverywhere setup --protocol openai --model gpt-4.1 --api-key "$OPENAI_API_KEY"
+aiverywhere setup --no-input --protocol ollama --model llama3.2
+aiverywhere setup --protocol custom --model local \
+  --base-url http://127.0.0.1:8000/v1 --chat-path /v1/chat/completions
+```
+
+`custom.headers` should contain only non-sensitive or necessary custom headers; credentials still use `api_key` / `auth_token` or environment references, with `config.json` mode `0600`.
+
 ## Configuration
 
 `init` creates the single instance configuration at `<install-root>/config.json`. `setup` writes the model and runtime parameters while preserving `mcpServers` and `wechat`; unknown sections are rejected.

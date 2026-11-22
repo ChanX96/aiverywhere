@@ -57,7 +57,8 @@ class Native:
             return raw.decode("utf-8").strip()
 
 
-MODEL_FIELDS = {"model", "base_url", "api_key", "auth_token", "api_key_env", "auth_token_env", "max_tokens"}
+MODEL_FIELDS = {"model", "base_url", "api_key", "auth_token", "api_key_env", "auth_token_env",
+                "max_tokens", "protocol", "chat_path", "headers"}
 APPROVAL_TOOLS = frozenset({"write_file", "edit_file", "run_command", "accept_artifact"})
 CREDENTIAL_FIELDS = ("api_key", "auth_token", "api_key_env", "auth_token_env")
 
@@ -81,14 +82,26 @@ def executor(client, model: str | None, store: Store):
         if key == "max_tokens":
             if type(value) is not int or value <= 0:
                 raise ValueError("model.max_tokens 需要正整数")
+        elif key == "headers":
+            if (not isinstance(value, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                                      for k, v in value.items())):
+                raise ValueError("model.headers 需要字符串键值对象")
         elif not isinstance(value, str):
             raise ValueError("model 分区的连接参数需要字符串")
+    protocol = settings.get("protocol", "anthropic")
+    if protocol not in {"anthropic", "openai", "ollama", "custom"}:
+        raise ValueError("model.protocol 支持 anthropic、openai、ollama 或 custom")
+    if settings.get("chat_path") and not settings["chat_path"].startswith("/"):
+        raise ValueError("model.chat_path 需要以 / 开头")
     if sum(bool(settings.get(key)) for key in CREDENTIAL_FIELDS) > 1:
         raise ValueError("model 分区只能选择一种凭据方式")
     for key in ("api_key_env", "auth_token_env"):
         if settings.get(key) and not settings[key].isidentifier():
             raise ValueError(f"model.{key} 需要合法的环境变量名")
-    return Messages(client, model, settings=settings)
+    if protocol == "anthropic":
+        return Messages(client, model, settings=settings)
+    from .protocols import ChatCompletions
+    return ChatCompletions(client, model, settings=settings)
 
 
 class Messages:
@@ -457,7 +470,7 @@ class Task:
         try:
             if callable(provider):
                 provider = provider()
-            self.executor_name = "native" if isinstance(provider, Native) else "messages"
+            self.executor_name = "native" if isinstance(provider, Native) else getattr(provider, "protocol", "messages")
             if not prompt.strip():
                 raise ValueError("任务内容不能为空")
             self.provider, self.max_turns, self.timeout = provider, max_turns, timeout

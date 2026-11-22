@@ -58,6 +58,7 @@ class Native:
 
 
 MODEL_FIELDS = {"model", "base_url", "api_key", "auth_token", "api_key_env", "auth_token_env", "max_tokens"}
+APPROVAL_TOOLS = frozenset({"write_file", "edit_file", "run_command", "accept_artifact"})
 CREDENTIAL_FIELDS = ("api_key", "auth_token", "api_key_env", "auth_token_env")
 
 
@@ -381,8 +382,7 @@ class Task:
         async def execute():
             receipt = {"id": call["id"], "tool": name}
             try:
-                gated = {"write_file", "edit_file", "run_command", "accept_artifact"}
-                if self.approval is not None and name in gated:
+                if self.approval is not None and name in APPROVAL_TOOLS:
                     if not await self.approval(name, values):
                         raise PermissionError("用户拒绝了这次操作")
                 if discovery:
@@ -465,7 +465,8 @@ class Task:
                 self.goal = prompt
             environment = inspect_environment(self.store, self.entry, self.host, self.writable,
                                               self.mcp_servers, agent_edit=self.agent_edit,
-                                              exec_allowed=self.exec_allowed)
+                                              exec_allowed=self.exec_allowed,
+                                              network_allowed=self.network_allowed)
             if isinstance(provider, Native):
                 if any((self.writable, self.mcp_servers, self.agent_edit, self.store.confirm_shared)):
                     raise ValueError("本次带有本地工具授权，请使用 Messages 模式，或在原生宿主中授予所需权限")

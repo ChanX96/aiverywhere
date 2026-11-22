@@ -316,6 +316,8 @@ async def chat(args, store: Store, provider) -> int:
         grants["write"] = True
     if ask["exec"]:
         grants["exec"] = True
+    base_grants = dict(grants)
+    base_ask = dict(ask)
     approval_future = None
     prompt_ui = None
 
@@ -453,6 +455,11 @@ async def chat(args, store: Store, provider) -> int:
             candidate.load()
             if candidate.resolve_pending():
                 message(f"恢复 session {candidate.id}；上次回合结果未知，已记录待核对。")
+            if previous is not None:
+                grants.clear()
+                grants.update(base_grants)
+                ask.clear()
+                ask.update(base_ask)
             new_task = build_task(candidate.id, candidate.history())
             summary = candidate.summary()
 
@@ -653,6 +660,8 @@ async def chat(args, store: Store, provider) -> int:
                     await task_handle
                 except asyncio.CancelledError:
                     pass
+                except Exception as exc:
+                    message(f"任务异常结束：{str(exc) or type(exc).__name__}")
                 current = None
                 continue
             while True:
@@ -684,6 +693,8 @@ async def chat(args, store: Store, provider) -> int:
                     task_handle.result()
                 except asyncio.CancelledError:
                     pass
+                except Exception as exc:
+                    message(f"任务异常结束：{str(exc) or type(exc).__name__}")
                 break
             current = None
     finally:

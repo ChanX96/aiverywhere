@@ -6,13 +6,14 @@ import os
 import platform
 import shutil
 import sys
+from datetime import datetime
 
 from ..core.store import Store
 
 
 def inspect_environment(store: Store, entry: str, host: str | None, writable: bool,
                         mcp_servers: tuple[str, ...] = (), *, agent_edit: str | None = None,
-                        exec_allowed: bool = False) -> dict:
+                        exec_allowed: bool = False, network_allowed: bool = True) -> dict:
     def checked(name: str) -> str:
         if len(name) > 100 or not name.isprintable():
             raise ValueError("宿主名称应为不超过 100 个字符的单行文本")
@@ -31,8 +32,11 @@ def inspect_environment(store: Store, entry: str, host: str | None, writable: bo
             identity = {"name": None, "source": "ambiguous" if hints else "unknown"}
     markers = (".git", "pyproject.toml", "requirements.txt", "package.json", "Cargo.toml", "go.mod", "README.md")
     commands = ("git", "python3", "node", "launchctl", "systemctl", "crontab")
+    now = datetime.now().astimezone()
     return {
         "entry": entry,
+        "now": now.isoformat(timespec="seconds"),
+        "timezone": now.tzname(),
         "execution": "host_worker" if host else "local_process",
         "host": identity,
         "system": platform.system(),
@@ -44,6 +48,7 @@ def inspect_environment(store: Store, entry: str, host: str | None, writable: bo
         "project_markers": [name for name in markers if (store.project / name).exists()],
         "commands_on_path": [name for name in commands if shutil.which(name)],
         "grants": {"project_read": True, "project_write": writable, "command_exec": exec_allowed,
-                   "mcp_servers": list(mcp_servers), "agent_edit_revision": agent_edit},
+                   "network": network_allowed, "mcp_servers": list(mcp_servers),
+                   "agent_edit_revision": agent_edit},
         "unverified": ["browser_access", "unattended_wakeup"],
     }

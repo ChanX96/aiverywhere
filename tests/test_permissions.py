@@ -57,6 +57,37 @@ class PermissionTest(unittest.TestCase):
         self.assertTrue(permissions[-1]["allowed"])
         session.release()
 
+    def test_sessions_and_resume_commands_are_visible(self):
+        sessions = SessionStore(self.store)
+        first = sessions.create()
+        first_id = first.id
+        first.release()
+        second = sessions.create()
+        second.release()
+
+        async def lines():
+            yield f"/resume {first_id}"
+            yield "/sessions"
+            yield "/status"
+            yield "/quit"
+
+        out = io.StringIO()
+        with patch("aiverywhere.cli.main.input_lines", lines), redirect_stdout(out):
+            asyncio.run(invoke(self.args(), self.store))
+        self.assertIn(first_id, out.getvalue())
+        self.assertIn("turns=0", out.getvalue())
+
+    def test_network_can_be_revoked_for_the_session(self):
+        async def lines():
+            yield "/revoke network"
+            yield "/permissions"
+            yield "/quit"
+
+        out = io.StringIO()
+        with patch("aiverywhere.cli.main.input_lines", lines), redirect_stdout(out):
+            asyncio.run(invoke(self.args(), self.store))
+        self.assertIn("network: denied", out.getvalue())
+
     def test_ask_permissions_waits_for_approve(self):
         class Provider:
             async def agentloop(self, task, environment, messages, prompt, max_turns,
@@ -81,6 +112,68 @@ class PermissionTest(unittest.TestCase):
         results = [event for event in events if event.get("event") == "result"]
         self.assertEqual(results[0]["answer"], "approved")
         self.assertIn("write: allowed (ask each time)", out.getvalue())
+
+    def test_ask_permissions_deny(self):
+        class Provider:
+            async def agentloop(self, task, environment, messages, prompt, max_turns,
+                                checkpoint, context_manager=None):
+                allowed = await task.approval("write_file", {"path": "x", "text": "y",
+                                                             "expected": "new"})
+                answer = "approved" if allowed else "denied"
+                return answer, [*messages, {"role": "assistant", "content": answer}]
+
+        async def lines():
+            yield "write something"
+            yield "/deny"
+            yield "/quit"
+
+        out = io.StringIO()
+        with patch("aiverywhere.cli.main.input_lines", lines), \
+                patch("aiverywhere.cli.main.executor", return_value=Provider()), \
+                redirect_stdout(out):
+            asyncio.run(invoke(self.args(ask_permissions=True), self.store))
+        events = [json.loads(line) for line in out.getvalue().splitlines()]
+        results = [event for event in events if event.get("event") == "result"]
+        self.assertEqual(results[0]["answer"], "denied")
+
+    def test_tty_approval_uses_the_foreground_prompt(self):
+        from aiverywhere.cli.main import chat
+
+        class Provider:
+            async def agentloop(self, task, environment, messages, prompt, max_turns,
+                                checkpoint, context_manager=None):
+                allowed = await task.approval("write_file", {"path": "x", "text": "y",
+                                                             "expected": "new"})
+                answer = "approved" if allowed else "denied"
+                return answer, [*messages, {"role": "assistant", "content": answer}]
+
+        class Prompt:
+            def __init__(self):
+                self.lines = ["write", "/approve", "/quit"]
+                self.calls = 0
+
+            async def prompt_async(self, text):
+                self.calls += 1
+                if not self.lines:
+                    raise EOFError
+                return self.lines.pop(0)
+
+        args = argparse.Namespace(allow_write=False, allow_exec=False, ask_permissions=True,
+                                  no_network=False, host=None, mcp=[], agent_edit=None,
+                                  max_turns=2, timeout=5, json=False, new_session=True)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            store = Store(root / "instance", project)
+            store.initialize()
+            prompt = Prompt()
+            with patch("aiverywhere.cli.main._make_prompt_session", return_value=prompt), \
+                    patch("aiverywhere.cli.main.sys.stdin.isatty", return_value=True), \
+                    patch("aiverywhere.cli.main.sys.stdout.isatty", return_value=False), \
+                    patch("builtins.print"):
+                asyncio.run(chat(args, store, Provider()))
+            self.assertEqual(prompt.calls, 3)
 
     def test_root_flags_parse(self):
         args = parser().parse_args(["--ask-permissions", "--no-network"])

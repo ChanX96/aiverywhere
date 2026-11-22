@@ -51,6 +51,10 @@ tests/test_dream.py          Clue memory, ordinary Dream task, and tool-permissi
 tests/test_tools.py           File search/edit, command, and web-tool tests
 tests/test_stream.py          SSE text, CLI streaming, and basic cancellation tests
 tests/test_workers.py         Worker private workspaces, artifact hand-off, and permissions
+tests/test_session.py         Durable sessions, locking, crash recovery, and compaction
+tests/test_permissions.py      Permission filtering, grants, approval, TTY prompt, and network
+tests/test_installer.py        Host-only install and project-local instance
+tests/shell/memory.sh          Shell-only memory interoperability
 ```
 
 - Declare the build backend with `[build-system]` in `pyproject.toml` and point `aiverywhere` at `aiverywhere.cli:main` with `[project.scripts]`. Keep the version only in `__init__.py`. The command line, module startup, and host delegation share one task-execution path. [PyPA's pyproject.toml guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)

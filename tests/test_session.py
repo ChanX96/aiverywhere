@@ -63,6 +63,23 @@ class SessionTest(unittest.TestCase):
         self.assertEqual([m["content"] for m in check.history()], ["first", "second"])
         self.assertFalse(check.recovered)
 
+    def test_summary_survives_reload_and_shapes_the_context(self):
+        session = self.sessions.create()
+        session.append_summary("Plan: keep the migration open", method="model",
+                               covers_messages=4)
+        session.release()
+        again = self.sessions.open(session.id)
+        again.load()
+        summary = again.summary()
+        again.release()
+        self.assertEqual(summary["text"], "Plan: keep the migration open")
+        manager = ContextManager(self.store, None, summary=summary)
+        view = manager.context_view([{"role": "user", "content": "old"},
+                                     {"role": "assistant", "content": "answer"},
+                                     {"role": "user", "content": "next"}])
+        self.assertTrue(view[0]["content"].startswith("[Earlier conversation summary]"))
+        self.assertEqual(view[0]["content"].count("Plan"), 1)
+
     def test_interrupted_turn_is_marked_unknown(self):
         session = self.sessions.create()
         session.begin_turn("unfinished")

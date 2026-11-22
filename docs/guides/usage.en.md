@@ -192,7 +192,7 @@ File tools are `list_files`, `read_file`, `search_files`, `write_file`, and `edi
 
 A main `run`/`chat` task may call `delegate(tasks)` for up to two depth-one workers. Each worker runs in a private copy under `work/<main-task>/<worker>/` with the same `Task.run()`, `SKILL.md`, and memory project, and cannot modify the real project. It returns a summary and artifacts (path, size, SHA-256); the main task verifies them and calls `accept_artifact` to write an authorized target. Command isolation is enabled only after an actual Seatbelt or bubblewrap probe; otherwise a worker keeps restricted file tools but cannot run commands.
 
-On an interactive TTY, type `/` to open the command menu: `/help`, `/new`, `/jobs`, `/cancel`, `/ask`, and `/quit`.
+On an interactive TTY, type `/` to open the command menu: `/help`, `/new`, `/resume`, `/sessions`, `/status`, `/compact`, `/permissions`, `/grant`, `/revoke`, `/jobs`, `/cancel`, `/ask`, and `/quit`.
 
 Non-JSON interactive and one-shot runs stream text; `--json` keeps one final receipt. Ctrl+C cancels the current main task; a TTY redisplays the prompt after the turn. Non-TTY input can still use `/cancel`; `/cancel <worker-id>` cancels only that worker. Completed artifacts remain inspectable; operations with unknown external results stay pending verification.
 
@@ -228,7 +228,7 @@ aiverywhere web
 
 `link` creates only a symbolic link to the live agent and is idempotent; it refuses to overwrite a link that points somewhere else. Hosts that follow the project skill directory convention discover it; other hosts read the absolute path from `skill --info`.
 
-The console's "Chat & work" page submits tasks to the current instance. It is read-only by default; only after enabling "Allow project writes" can the model modify the current project. Session context lives in the current web process and resets when switching modes or restarting the process; tool receipts appear on the right. If no model is configured, the page reports the error instead of silently degrading.
+The console's "Chat & work" page submits tasks to the current instance. It is read-only by default; project writes, command execution, and network access can be enabled separately. Web session context lives in the current web process and resets when switching modes or restarting the process; CLI durable sessions are a separate entry. Tool receipts appear on the right. If no model is configured, the page reports the error instead of silently degrading.
 
 In the console, use "Memory and skills" to search by title, open a title to view or edit it, and cancel before deleting. "Agent definition" edits the instance-wide working agreement. While the console is open, external edits usually appear within 3 seconds. The page keeps local drafts and reports a conflict when saving an older revision. Deleting the local definition restores the distributed template; `skill --info` recreates the live file for hosts.
 

@@ -503,8 +503,6 @@ class _DuckDuckGoResults(HTMLParser):
             self._title, self._href, self._text = "", fields.get("href", ""), []
         elif tag in {"a", "div"} and "result__snippet" in classes:
             self._in_snippet, self._snippet = True, []
-        if self._title is not None and tag in {"b", "strong"}:
-            pass
 
     def handle_data(self, data):
         if self._title is not None:

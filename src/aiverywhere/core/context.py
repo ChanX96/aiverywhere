@@ -42,12 +42,6 @@ def _prompt(message: dict) -> bool:
     return message.get("role") == "user" and isinstance(content, str)
 
 
-def _tool_result(message: dict) -> bool:
-    content = message.get("content")
-    return (message.get("role") == "user" and isinstance(content, list)
-            and any(isinstance(item, dict) and item.get("type") == "tool_result"
-                    for item in content))
-
 
 class ContextManager:
     def __init__(self, store: Store, provider, *, summary: dict | None = None,

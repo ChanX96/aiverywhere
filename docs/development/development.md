@@ -50,6 +50,10 @@ tests/test_dream.py           线索记忆、Dream 普通任务和工具权限�
 tests/test_tools.py            文件搜索/编辑、命令和网页工具测试
 tests/test_stream.py           SSE 文本、CLI 流式输出和取消基础测试
 tests/test_workers.py          worker 私有工作区、产物交接和权限测试
+tests/test_session.py          durable session、锁、崩溃恢复和 compaction
+tests/test_permissions.py      权限过滤、授权审批、TTY prompt 和网络开关
+tests/test_installer.py        仅宿主安装与项目本地实例
+tests/shell/memory.sh          纯 Shell 记忆互读验收
 ```
 
 - 在 `pyproject.toml` 用 `[build-system]` 声明构建后端，以 `[project.scripts]` 将 `aiverywhere` 指向 `aiverywhere.cli:main`，版本只维护在 `__init__.py`。命令行、模块启动和宿主委派共用一套任务执行逻辑。[PyPA 的 pyproject.toml 指南](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)

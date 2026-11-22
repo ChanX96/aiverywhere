@@ -82,6 +82,7 @@ sh <skill>/scripts/validate-memory.sh < record.json
 ## 工具与委派
 
 - 宿主使用自己的文件、命令、网页和子 agent 工具。
+- 搜索结果是摘要；涉及天气、价格、版本、政策等当前事实时，继续用 `web_fetch` 打开官方页面，不能只凭搜索摘要或说“没有结果”。
 - 需要本地文件工具时，可按当前环境安装 CLI；写入、命令和联网分别由 CLI 权限控制，模型不能自行授权自己。
 - 只有存在 1–2 个真正独立、可并行的子目标时才委派 worker；简单或有依赖的任务直接完成。
 - worker 的私有工作区、artifact 和取消规则见 [workers](references/workers.md)。

@@ -10,6 +10,7 @@
 - 网页搜索/抓取失败时区分限流、网络错误、空正文和内网拒绝；中文查询可先用短关键词，日期/年份可能导致 RSS 召回下降。
 - CLI 的 `/grant` 和 `/revoke` 只由用户输入，模型不能给自己授权；`--ask-permissions` 时写文件和命令等待 `/approve` 或 `/deny`。
 - `web_search`/`web_fetch` 不需要命令执行权限；`command_exec=false` 只限制 `run_command`，不要因此放弃网页通道。
+- 搜索结果是摘要；需要当前事实时继续用 `web_fetch` 打开官方或权威页面，不能只凭摘要下结论。
 
 ## CLI 可选
 

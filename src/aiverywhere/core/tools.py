@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -14,6 +15,27 @@ from pathlib import Path
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 from .store import Store, atomic_write, normalized, skill_template
+
+
+def _search_queries(query: str) -> list[str]:
+    """RSS search often does worse with dates; try a short form as a second query."""
+    short = re.sub(
+        r"\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|"
+        r"\d{4}[-/]\d{1,2}[-/]\d{1,2}|"
+        r"(今天|今日|明天|明日|后天|昨天|昨日|周[一二三四五六日天])",
+        " ", query)
+    short = re.sub(r"\s+", " ", short).strip()
+    if short and short != query.strip():
+        return [query, short]
+    return [query]
+
+
+def _rank_results(results: list[dict], query: str) -> list[dict]:
+    terms = [term.casefold() for term in re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff]{2,}", query)]
+    def score(item):
+        text = (item.get("title", "") + " " + item.get("content", "")).casefold()
+        return sum(term in text for term in terms)
+    return sorted(results, key=score, reverse=True)
 
 
 def tool(name: str, description: str, properties: dict, required: tuple = ()) -> dict:
@@ -48,7 +70,7 @@ NATIVE = [
          ("path", "old", "new", "expected")),
     tool("run_command", "在项目中执行一条命令，返回退出码和限长输出 / run argv in the workspace",
          {"argv": ARRAY, "cwd": TEXT, "timeout": INTEGER}, ("argv",)),
-    tool("web_search", "搜索公开网页，返回标题、URL 和摘要 / search public web",
+    tool("web_search", "搜索公开网页，返回标题、URL 和摘要。中文查询可用短关键词；年份/日期可能降低 RSS 召回 / search public web with a short query",
          {"query": TEXT}, ("query",)),
     tool("web_fetch", "读取公开 HTTP(S) 网页正文，拒绝内网地址 / fetch a public page",
          {"url": TEXT}, ("url",)),
@@ -373,15 +395,23 @@ class Tools:
         if not query.strip() or len(query) > 500:
             raise ValueError("搜索词需要 1–500 个字符")
         failures = []
+        queries = _search_queries(query)
         for name, backend in (("bing-rss", self._search_bing),
                               ("duckduckgo-html", self._search_duckduckgo)):
-            try:
-                results = backend(query)
-            except Exception as exc:
-                failures.append(f"{name}: {str(exc)[:200] or type(exc).__name__}")
-                continue
+            results = []
+            seen = set()
+            for search_query in queries:
+                try:
+                    found = backend(search_query)
+                except Exception as exc:
+                    failures.append(f"{name}: {str(exc)[:200] or type(exc).__name__}")
+                    continue
+                for item in found:
+                    if item["url"] not in seen:
+                        seen.add(item["url"])
+                        results.append(item)
             if results:
-                return {"query": query, "results": results, "backend": name}
+                return {"query": query, "results": _rank_results(results, query)[:8], "backend": name}
             failures.append(f"{name}: empty")
         raise ValueError("搜索服务不可用：" + "；".join(failures))
 

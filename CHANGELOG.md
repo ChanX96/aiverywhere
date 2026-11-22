@@ -31,6 +31,7 @@
 - 源码按 `cli/core/integrations/platform/ui` 目录重构，保留 `aiverywhere.cli:main`。
 - 修复流式响应中的 provider thinking 块导致下一轮工具请求 HTTP 422：工具循环只保留 text/tool_use 块。
 - CLI 交互改为单会话多轮：连续输入共享同一个 Task 历史和 task_id，`/new` 才显式切换会话；修复退出时 `reader` 为 `None` 的回溯。
+- `web_search` 对日期/年份重的查询自动补一次短查询并按关键词排序；环境摘要加入 now/timezone/network grant，worker 继承审批。
 - 修复 `Tools.execute` 对 `web_search`、`web_fetch`、`run_command` 的分派遗漏；TTY 改为顺序 prompt，任务结束稳定回到 `aiverywhere ›`。
 - 环境摘要加入 `now`、`timezone` 和 network grant；worker 继承父任务的逐次审批回调。
 - CLI 增加 `/permissions`、`/grant`、`/revoke`、`/approve`、`/deny`，写文件/命令/联网可在 session 内授权或逐次审批；Web 工作台复用对应权限字段。

@@ -56,6 +56,38 @@ class StreamTest(unittest.TestCase):
             self.assertEqual("".join(chunks), "你好，完成")
 
 
+    def test_messages_stream_drops_provider_thinking_blocks(self):
+        events = [
+            {"type": "content_block_start", "index": 0,
+             "content_block": {"type": "thinking", "thinking": ""}},
+            {"type": "content_block_delta", "index": 0,
+             "delta": {"type": "thinking_delta", "thinking": "内部推理"}},
+            {"type": "content_block_stop", "index": 0},
+            {"type": "content_block_start", "index": 1,
+             "content_block": {"type": "text", "text": ""}},
+            {"type": "content_block_delta", "index": 1,
+             "delta": {"type": "text_delta", "text": "答复"}},
+            {"type": "content_block_stop", "index": 1},
+            {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+        ]
+        body = "".join(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events)
+
+        async def reply(request):
+            return httpx.Response(200, text=body,
+                                  headers={"content-type": "text/event-stream"})
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            store = Store(root / "instance", project)
+            store.initialize()
+            client = httpx.AsyncClient(transport=httpx.MockTransport(reply))
+            provider = Messages(client, "test", settings={"model": "test",
+                                                          "base_url": "http://test.invalid"})
+            result = asyncio.run(provider.stream_send("system", [{"role": "user", "content": "hi"}], []))
+            self.assertEqual(result["content"], [{"type": "text", "text": "答复"}])
+
     def test_cli_run_streams_text_once_without_duplicate_answer(self):
         events = [
             {"type": "content_block_start", "index": 0,

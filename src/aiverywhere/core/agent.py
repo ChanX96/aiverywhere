@@ -117,6 +117,13 @@ class Messages:
     def _env(name: str | None) -> str | None:
         return os.environ.get(name) if name else None
 
+    @staticmethod
+    def _http_error(exc) -> str:
+        detail = (exc.response.text or "").strip().replace("\n", " ")[:500]
+        suffix = f"：{detail}" if detail else ""
+        hint = "；请核对 model、base_url 与工具 schema 是否被该端点接受" if exc.response.status_code == 422 else ""
+        return f"模型服务返回 HTTP {exc.response.status_code}（{exc.response.reason_phrase}）{hint}{suffix}"
+
     async def send(self, system: str, messages: list, tools: list) -> dict:
         import httpx
 
@@ -134,12 +141,17 @@ class Messages:
             })
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise ValueError(f"模型服务返回 HTTP {exc.response.status_code}（{exc.response.reason_phrase}）") from exc
+            raise ValueError(self._http_error(exc)) from exc
         except httpx.RequestError as exc:
             raise ValueError(f"模型请求未完成（{type(exc).__name__}）") from exc
         data = response.json()
         if not isinstance(data, dict) or not isinstance(data.get("content"), list):
             raise ValueError("模型服务返回的内容不符合 Messages 协议")
+        # DeepSeek/Anthropic-compatible endpoints may return thinking blocks
+        # with provider-specific signatures. They are not part of our tool-loop
+        # protocol; retaining a stripped block makes the next request invalid.
+        data["content"] = [block for block in data["content"]
+                           if isinstance(block, dict) and block.get("type") in {"text", "tool_use"}]
         return data
 
     async def stream_send(self, system: str, messages: list, tools: list, on_text=None) -> dict:
@@ -208,14 +220,15 @@ class Messages:
                         detail = event.get("error") or {}
                         raise ValueError(f"模型流式响应错误：{detail.get('message') or detail}")
         except httpx.HTTPStatusError as exc:
-            raise ValueError(f"模型服务返回 HTTP {exc.response.status_code}（{exc.response.reason_phrase}）") from exc
+            raise ValueError(self._http_error(exc)) from exc
         except httpx.RequestError as exc:
             raise ValueError(f"模型请求未完成（{type(exc).__name__}）") from exc
         content = []
         for index in sorted(blocks):
             block = dict(blocks[index])
             block.pop("_partial", None)
-            content.append(block)
+            if block.get("type") in {"text", "tool_use"}:
+                content.append(block)
         return {"content": content, "stop_reason": stop_reason}
 
     async def agentloop(self, task: Task, environment: dict, messages: list, prompt: str, max_turns: int,

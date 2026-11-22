@@ -139,7 +139,7 @@ def render(store: Store) -> str:
         _line("访问", "网页可用 · worker 可用；--allow-write 写入 · --allow-exec 命令"),
         rule,
         "  " + _paint("1;36", "aiverywhere ›") + " 输入任务开始"
-        + _paint("2", "   /help 帮助 · /cancel 取消 · /quit 退出"),
+        + _paint("2", "   /help 帮助 · /new 新会话 · /cancel 取消 · /quit 退出"),
         "  " + _paint("2", "aiverywhere run '...'  ·  aiverywhere web  ·  aiverywhere skill --info"),
         "",
     ]

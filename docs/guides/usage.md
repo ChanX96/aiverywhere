@@ -132,7 +132,7 @@ aiverywhere chat
 
 安装器默认使用 `~/.aiverywhere`。在已创建技能链接的项目中，命令会通过链接定位自定义安装根；其他目录用 `--home` 或 `AIVERYWHERE_HOME` 指定。希望某个项目使用独立实例时，执行 `aiverywhere --home <项目> init`，再用同一 `--home` 运行 `link`，避免与用户级实例混用。
 
-每项任务只有一个 agentloop。宿主运行自己的循环，可把目标委派给原生子 agent。独立 CLI 可调已配置的原生命令，只有直接连接 Messages 端点时才运行本项目的最小工具循环。交互模式一次推进一个前台任务；运行中输入 `/cancel` 取消当前任务，`/cancel <worker-id>` 只取消指定 worker，`/jobs` 查看状态，`/ask ID 内容` 追问。
+每项任务只有一个 agentloop。宿主运行自己的循环，可把目标委派给原生子 agent。独立 CLI 可调已配置的原生命令，只有直接连接 Messages 端点时才运行本项目的最小工具循环。交互模式保留同一个会话历史，每行续接当前会话；运行中输入 `/cancel` 取消当前任务，`/cancel <worker-id>` 只取消指定 worker，`/jobs` 查看状态，`/new` 显式开始新会话，`/ask ID 内容` 向已有会话追问。
 
 ```sh
 printf '%s\n' '读 README，返回启动命令和依据。' |
@@ -147,7 +147,7 @@ printf '%s\n' '读 README，返回启动命令和依据。' |
 
 `run`/`chat` 的主任务可以调用 `delegate(tasks)`，默认最多 2 个、深度 1 层的 worker。每个 worker 在安装根的 `work/<主任务>/<worker>/` 私有副本中运行，使用同一个 `Task.run()`、`SKILL.md` 和记忆项目；它不能改真实项目。worker 交回摘要和 artifact（路径、大小、SHA-256），主任务核验后调用 `accept_artifact` 写入授权目标。命令隔离通过实际探测 Seatbelt 或 bubblewrap 决定；不可用时 worker 只能使用受限文件工具。
 
-交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/jobs`、`/cancel`、`/ask`、`/quit`。
+交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/new`、`/jobs`、`/cancel`、`/ask`、`/quit`。
 
 非 JSON 的交互和一次性运行会流式显示正文；`--json` 保持一份最终回执。Ctrl+C 取消当前主任务，`/cancel` 取消当前任务，`/cancel <worker-id>` 只取消指定 worker。已完成产物仍可查；外部操作结果未知时保留待核对状态。
 

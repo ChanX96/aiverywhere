@@ -176,7 +176,7 @@ class Smoke(unittest.TestCase):
 
             async def reply(request):
                 body = json.loads(request.content)
-                prompt = body["messages"][0]["content"]
+                prompt = body["messages"][-1]["content"]
                 return httpx.Response(200, json={"stop_reason": "end_turn",
                     "content": [{"type": "text", "text": "done:" + prompt}]})
 
@@ -197,6 +197,9 @@ class Smoke(unittest.TestCase):
             events = [json.loads(line) for line in out.getvalue().splitlines()]
             self.assertEqual([e["answer"] for e in events if e["event"] == "result"],
                              ["done:first", "done:second"])
+            results = [e for e in events if e["event"] == "result"]
+            self.assertEqual(len({e["task_id"] for e in results}), 1)
+            events = [e for e in events if e["event"] != "help"]
             self.assertEqual([e["event"] for e in events],
                              ["accepted", "start", "result", "accepted", "start", "result"])
 

@@ -180,6 +180,7 @@ Type `/` to open the command menu:
 | Command | Purpose |
 | --- | --- |
 | `/help` | Show help |
+| `/new` | Start a new session |
 | `/jobs` | Show tasks in this process |
 | `/cancel` | Cancel the current task |
 | `/ask <id> <question>` | Ask a follow-up against a completed task |

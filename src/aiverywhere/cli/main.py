@@ -232,6 +232,7 @@ async def input_lines():
 
 SLASH_COMMANDS = (
     ("/help", "显示帮助"),
+    ("/new", "开始一个新的会话"),
     ("/jobs", "查看任务状态"),
     ("/cancel", "取消当前任务"),
     ("/ask", "向已完成任务追加问题：/ask <task-id> <问题>"),
@@ -273,6 +274,9 @@ def _start_terminal_reader(loop, queue) -> threading.Thread | None:
                 line = "/quit"
             except KeyboardInterrupt:
                 line = "/cancel"
+            except Exception:
+                # Never leave the foreground loop waiting on a dead reader.
+                line = "/quit"
             try:
                 loop.call_soon_threadsafe(queue.put_nowait, line)
             except RuntimeError:
@@ -286,7 +290,7 @@ def _start_terminal_reader(loop, queue) -> threading.Thread | None:
 
 
 async def chat(args, store: Store, provider) -> int:
-    """Read one line, finish one task, then read the next. No queue or cancel state."""
+    """Keep one foreground agent session and one task per user turn."""
     tasks: dict[str, Task] = {}
 
     def emit(**fields):
@@ -328,7 +332,8 @@ async def chat(args, store: Store, provider) -> int:
             result = result | {"answer": ""}
         emit(event="result", **result)
 
-    help_text = "每行执行一个任务，完成后再读取下一行。输入 / 显示命令菜单：/help 帮助、/jobs 状态、/cancel 取消、/ask 追问、/quit 退出。"
+    help_text = ("多轮会话：每行续接当前会话，输入 / 显示命令菜单。"
+                 "/help 帮助、/new 新会话、/jobs 状态、/cancel 取消、/ask 追问、/quit 退出。")
 
     def prompt():
         if sys.stdin.isatty() and not sys.stdin.closed:
@@ -350,6 +355,21 @@ async def chat(args, store: Store, provider) -> int:
     reader = None if terminal_thread is not None else asyncio.create_task(read_lines())
     current: asyncio.Task | None = None
     quitting = False
+    session: Task | None = None
+
+    def new_session() -> Task:
+        nonlocal session
+        task = Task(store, writable=args.allow_write, exec_allowed=args.allow_exec,
+                    entry="chat", host=args.host, mcp_servers=tuple(args.mcp),
+                    agent_edit=args.agent_edit, allow_workers=True)
+        session = task
+        tasks.clear()
+        tasks[task.id] = task
+        emit(event="help", message=f"新会话已开始：{task.id}")
+        return task
+
+    def current_session() -> Task:
+        return session if session is not None else new_session()
 
     def interrupt():
         nonlocal current
@@ -373,15 +393,25 @@ async def chat(args, store: Store, provider) -> int:
             if line == "/quit":
                 break
             if line == "/cancel":
-                emit(event="help", message="当前没有正在运行的任务。")
+                if current is not None and not current.done():
+                    current.cancel()
+                else:
+                    emit(event="help", message="当前没有正在运行的任务。")
                 continue
             if line == "/help":
                 emit(event="help", message=help_text)
+                continue
+            if line == "/new":
+                if current is not None and not current.done():
+                    emit(event="help", message="当前任务仍在运行；先 /cancel，再开始新会话。")
+                else:
+                    new_session()
                 continue
             if line == "/jobs":
                 for task in tasks.values():
                     emit(event="status", task_id=task.id, status=task.status)
                 continue
+            task: Task | None = None
             if line.startswith("/"):
                 cmd, _, rest = line.partition(" ")
                 ident, _, followup = rest.partition(" ")
@@ -392,10 +422,7 @@ async def chat(args, store: Store, provider) -> int:
                     emit(event="help", message=help_text)
                     continue
             else:
-                task = Task(store, writable=args.allow_write, exec_allowed=args.allow_exec,
-                            entry="chat", host=args.host, mcp_servers=tuple(args.mcp),
-                            agent_edit=args.agent_edit, allow_workers=True)
-                tasks[task.id] = task
+                task = current_session()
                 task_handle = asyncio.create_task(execute(task, line))
             current = task_handle
             while True:
@@ -433,11 +460,11 @@ async def chat(args, store: Store, provider) -> int:
             loop.remove_signal_handler(signal.SIGINT)
         except (NotImplementedError, RuntimeError):
             pass
-        reader.cancel()
-        with suppress(asyncio.CancelledError):
-            await reader
+        if reader is not None:
+            reader.cancel()
+            with suppress(asyncio.CancelledError):
+                await reader
     return 0
-
 
 async def one(args, store: Store, provider: Messages | Native) -> int:
     prompt = sys.stdin.read() if args.prompt == "-" else args.prompt

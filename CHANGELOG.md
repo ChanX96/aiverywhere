@@ -30,6 +30,7 @@
 - `install.sh` 默认仅宿主为纯 Shell；`--cli` 才是可选 Python 安装。
 - 源码按 `cli/core/integrations/platform/ui` 目录重构，保留 `aiverywhere.cli:main`。
 - 修复流式响应中的 provider thinking 块导致下一轮工具请求 HTTP 422：工具循环只保留 text/tool_use 块。
+- CLI 交互改为单会话多轮：连续输入共享同一个 Task 历史和 task_id，`/new` 才显式切换会话；修复退出时 `reader` 为 `None` 的回溯。
 - CLI 交互输入使用 prompt-toolkit；输入 `/` 显示 `/help`、`/jobs`、`/cancel`、`/ask`、`/quit` 菜单。
 - README 重写为 GitHub 项目首页结构，补充亮点、架构、快速开始、状态和开发说明。
 - 网页搜索从 Tavily 切换为免 Key 的 Bing RSS，失败时回退 DuckDuckGo HTML。

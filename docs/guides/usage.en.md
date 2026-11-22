@@ -132,7 +132,7 @@ Running `aiverywhere` prints the project, instance, model, agent revision, and m
 
 The installer uses `~/.aiverywhere` by default. In a project that has the skill link, commands can locate a custom install root through the link; from other directories use `--home` or `AIVERYWHERE_HOME`. For a project-local instance, run `aiverywhere --home <project> init` and then `link` with the same `--home` so it does not mix with the user-level instance.
 
-Each task has exactly one agent loop. A host runs its own loop and may delegate to a native subagent. The standalone CLI can call a configured native command; only a direct Messages endpoint runs this project's minimal local tool loop. In chat mode, one foreground task advances at a time; while it runs, `/cancel` cancels the current task and `/cancel <worker-id>` cancels only that worker. `/jobs` shows status and `/ask ID text` follows up.
+Each task has exactly one agent loop. A host runs its own loop and may delegate to a native subagent. The standalone CLI can call a configured native command; only a direct Messages endpoint runs this project's minimal local tool loop. Chat mode keeps one conversation history and each line continues the current session; while a turn runs, `/cancel` cancels the current task and `/cancel <worker-id>` cancels only that worker. `/jobs` shows status, `/new` explicitly starts a new session, and `/ask ID text` follows up.
 
 ```sh
 printf '%s\n' 'Read the README, return the startup command and the evidence.' |
@@ -147,7 +147,7 @@ File tools are `list_files`, `read_file`, `search_files`, `write_file`, and `edi
 
 A main `run`/`chat` task may call `delegate(tasks)` for up to two depth-one workers. Each worker runs in a private copy under `work/<main-task>/<worker>/` with the same `Task.run()`, `SKILL.md`, and memory project, and cannot modify the real project. It returns a summary and artifacts (path, size, SHA-256); the main task verifies them and calls `accept_artifact` to write an authorized target. Command isolation is enabled only after an actual Seatbelt or bubblewrap probe; otherwise a worker keeps restricted file tools but cannot run commands.
 
-On an interactive TTY, type `/` to open the command menu: `/help`, `/jobs`, `/cancel`, `/ask`, and `/quit`.
+On an interactive TTY, type `/` to open the command menu: `/help`, `/new`, `/jobs`, `/cancel`, `/ask`, and `/quit`.
 
 Non-JSON interactive and one-shot runs stream text; `--json` keeps one final receipt. Ctrl+C cancels the current main task, `/cancel` cancels it, and `/cancel <worker-id>` cancels only that worker. Completed artifacts remain inspectable; operations with unknown external results stay pending verification.
 

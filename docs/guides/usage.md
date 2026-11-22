@@ -147,6 +147,8 @@ printf '%s\n' '读 README，返回启动命令和依据。' |
 
 `run`/`chat` 的主任务可以调用 `delegate(tasks)`，默认最多 2 个、深度 1 层的 worker。每个 worker 在安装根的 `work/<主任务>/<worker>/` 私有副本中运行，使用同一个 `Task.run()`、`SKILL.md` 和记忆项目；它不能改真实项目。worker 交回摘要和 artifact（路径、大小、SHA-256），主任务核验后调用 `accept_artifact` 写入授权目标。命令隔离通过实际探测 Seatbelt 或 bubblewrap 决定；不可用时 worker 只能使用受限文件工具。
 
+交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/jobs`、`/cancel`、`/ask`、`/quit`。
+
 非 JSON 的交互和一次性运行会流式显示正文；`--json` 保持一份最终回执。Ctrl+C 取消当前主任务，`/cancel` 取消当前任务，`/cancel <worker-id>` 只取消指定 worker。已完成产物仍可查；外部操作结果未知时保留待核对状态。
 
 ## 记忆、技能和本地工作台

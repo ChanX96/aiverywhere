@@ -11,6 +11,7 @@ import json
 import os
 import stat
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -229,6 +230,61 @@ async def input_lines():
         transport.close()
 
 
+SLASH_COMMANDS = (
+    ("/help", "显示帮助"),
+    ("/jobs", "查看任务状态"),
+    ("/cancel", "取消当前任务"),
+    ("/ask", "向已完成任务追加问题：/ask <task-id> <问题>"),
+    ("/quit", "退出交互"),
+)
+
+
+def _slash_matches(text: str) -> list[tuple[str, str]]:
+    if not text.startswith("/"):
+        return []
+    return [(command, description) for command, description in SLASH_COMMANDS
+            if command.startswith(text)]
+
+
+def _start_terminal_reader(loop, queue) -> threading.Thread | None:
+    """Use a prompt-toolkit completion menu when a real TTY is available."""
+    try:
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.completion import Completer, Completion
+        from prompt_toolkit.styles import Style
+    except ImportError:
+        return None
+
+    class SlashCompleter(Completer):
+        def get_completions(self, document, complete_event):
+            text = document.text_before_cursor
+            for command, description in _slash_matches(text):
+                yield Completion(command, start_position=-len(text),
+                                 display=command, display_meta=description)
+
+    def worker():
+        session = PromptSession(completer=SlashCompleter(),
+                                complete_while_typing=True,
+                                style=Style.from_dict({"prompt": "bold #22d3ee"}))
+        while True:
+            try:
+                line = session.prompt("aiverywhere › ")
+            except EOFError:
+                line = "/quit"
+            except KeyboardInterrupt:
+                line = "/cancel"
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, line)
+            except RuntimeError:
+                return
+            if line == "/quit":
+                return
+
+    thread = threading.Thread(target=worker, name="aiverywhere-prompt", daemon=True)
+    thread.start()
+    return thread
+
+
 async def chat(args, store: Store, provider) -> int:
     """Read one line, finish one task, then read the next. No queue or cancel state."""
     tasks: dict[str, Task] = {}
@@ -272,25 +328,26 @@ async def chat(args, store: Store, provider) -> int:
             result = result | {"answer": ""}
         emit(event="result", **result)
 
-    help_text = "每行执行一个任务，完成后再读取下一行。/help 帮助，/jobs 状态，/cancel 取消当前任务，/quit 退出。"
-    if sys.stdin.isatty():
-        emit(event="help", message=help_text)
+    help_text = "每行执行一个任务，完成后再读取下一行。输入 / 显示命令菜单：/help 帮助、/jobs 状态、/cancel 取消、/ask 追问、/quit 退出。"
 
     def prompt():
-        if sys.stdin.isatty():
+        if sys.stdin.isatty() and not sys.stdin.closed:
             start = "" if os.environ.get("NO_COLOR") else "\033[1;36m"
             end = "" if not start else "\033[0m"
             print(start + "aiverywhere › " + end, end="", flush=True)
 
     queue: asyncio.Queue[str] = asyncio.Queue()
     pending: list[str] = []
+    loop = asyncio.get_running_loop()
+    terminal_thread = None
+    if sys.stdin.isatty() and not args.json:
+        terminal_thread = _start_terminal_reader(loop, queue)
 
     async def read_lines():
         async for raw in input_lines():
             await queue.put(raw)
 
-    reader = asyncio.create_task(read_lines())
-    loop = asyncio.get_running_loop()
+    reader = None if terminal_thread is not None else asyncio.create_task(read_lines())
     current: asyncio.Task | None = None
     quitting = False
 
@@ -307,7 +364,8 @@ async def chat(args, store: Store, provider) -> int:
         pass
     try:
         while not quitting:
-            prompt()
+            if terminal_thread is None:
+                prompt()
             raw = pending.pop(0) if pending else await queue.get()
             line = raw.strip()
             if not line:

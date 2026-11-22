@@ -1,55 +1,149 @@
+<div align="center">
+
 # aiverywhere
 
-[简体中文](README.md) | **English**
+**The skill is the product, not an accessory to the CLI.**
+
+One agent contract for any host, terminal, local console, or scheduled job.
 
 [![CI](https://github.com/ChanX96/aiverywhere/actions/workflows/ci.yml/badge.svg)](https://github.com/ChanX96/aiverywhere/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Host shell](https://img.shields.io/badge/host-sh%20%2B%20jq-brightgreen.svg)](#installation)
-[![CLI Python 3.9+](https://img.shields.io/badge/cli-python%203.9%2B-blue.svg)](pyproject.toml)
+[![Host: sh + jq](https://img.shields.io/badge/host-sh%20%2B%20jq-brightgreen.svg)](#host-only-install)
+[![CLI: Python 3.9+](https://img.shields.io/badge/cli-python%203.9%2B-blue.svg)](pyproject.toml)
+[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#status)
 
-**Run the same agent in any host and in the terminal.** aiverywhere gives a model the goal, the context it needs, and the tools it may use. The model chooses what to do, decides whether to recall past experience, and decides which lessons are worth keeping. Python is responsible for writing tool results, memory revisions, scheduled work, and delivery receipts back to the project reliably.
+[简体中文](README.md) | [English](README.en.md)
 
-## Core shell
+</div>
 
-The core keeps only four things: one `SKILL.md`, one minimal model/tool loop, one memory and clue store, and a host/CLI entry. `init`, `setup`, `link`, `run`, `chat`, `memory`, and `dream` form the core. `chat` runs one line to completion at a time and keeps no background queue.
+## What is aiverywhere?
 
-The web console, WeChat gateway, `schedule`/`wake` scheduling, MCP, and native executor are optional adapters. `wake` is a one-shot call from an external cron, launchd, or systemd timer; it is not a daemon and registers no system service. Dream runs in the host's own idle loop with the host model, or as one ordinary CLI task.
+`aiverywhere` is a **shell-first agent skill** with an optional CLI. It gives a model a working contract, a small tool loop, durable project memory, and adapters for a local console, workers, WeChat, and scheduled jobs.
 
-## One-line installation
+Most agent projects assume you install Python and a command before doing anything. `aiverywhere` does the opposite:
 
-Host-only: macOS or Linux with POSIX `sh`; `jq` optional. Optional CLI: Python 3.9+. Run this in the project root:
+- **`SKILL.md` is the core product.** Any host that can read files and run commands can use it.
+- Host-only users manage memory with **POSIX Shell and plain JSON**, without Python, pip, or a venv.
+- The CLI is another optional host, not a prerequisite.
+- Hosts, the CLI, the console, and scheduled work read and write the **same memory files and schema**.
+
+## Highlights
+
+### Host-only, no forced CLI
+
+The default install copies the skill bundle, creates `<project>/.aiverywhere/`, and links `.agents/skills/aiverywhere`. There is no Python dependency and no model key requirement.
+
+### Memory as ordinary files
+
+```text
+.aiverywhere/data/memory/<project_key>/<id>.json
+```
+
+Each record has a stable ID, incremented `revision`, one of `fact` / `skill` / `clue`, and a fixed JSON Schema. `state.json` is reserved for plans, task claims, and channel receipts.
+
+### Host and CLI share one memory
+
+Shell records are immediately visible to the CLI, and CLI records are readable from the host scripts. The CLI reuses the same `validate-memory.sh` before writing.
+
+### A proactive skill
+
+`SKILL.md` defines not only how to call tools, but when to recall, when to save a fact or skill, when to leave a clue, when to process old clues, and when to promote a repeated workflow into a skill.
+
+### Tools, workers, and streaming
+
+- File discovery, search, edits, and permission-gated commands.
+- Depth-one parallel workers with private workspaces and artifact hand-off.
+- SSE text streaming, CLI streaming, Ctrl+C, and `/cancel`.
+- Optional local Web console, WeChat gateway, MCP, and schedulers.
+- Read-only by default; writes and command execution require explicit grants.
+
+### Keyless web search
+
+`web_search` uses **Bing RSS** as the primary channel and falls back to **DuckDuckGo HTML**. It no longer depends on Tavily. `web_fetch` accepts only public HTTP(S) text pages and rejects private, loopback, and reserved addresses on every redirect.
+
+### Local-first
+
+- Project-local instance by default: `<project>/.aiverywhere/`.
+- Credentials can be stored as environment-variable names.
+- The Web server binds only to loopback.
+- Console assets ship with the package; no CDN.
+- No system service and no shell-startup edits.
+
+## Architecture
+
+```text
+Host agent / CLI / Web / WeChat / scheduler
+                  │
+                  ▼
+             SKILL.md
+                  │
+                  ▼
+       Task loop + Tools + Workers
+                  │
+                  ▼
+   .aiverywhere/data/memory/<key>/*.json
+        (shared by host and CLI)
+```
+
+Source layout:
+
+```text
+src/aiverywhere/
+├── cli/                  CLI commands and composition root
+├── core/                 agent, store, memory, tools, workers
+├── integrations/web/     Web server, chat sessions, static assets
+├── integrations/wechat.py
+├── platform/             environment and sandbox
+└── ui/                   welcome screen and terminal presentation
+```
+
+## Quick start
+
+### Host-only install
+
+Requires macOS / Linux with POSIX `sh`; `jq` is optional.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
 ```
 
-With a source checkout, run `./install.sh` from the repository root. By default it installs only the host bundle into the project at `.aiverywhere/skills/aiverywhere`, creates `.aiverywhere/data/memory/`, and links `.agents/skills/aiverywhere` to the standard skill directory. This path needs no Python, pip, or venv. Add `--cli` only when you want the command-line runtime. Hosts do not need product-specific setup: a host that can read files reads that link or the absolute path printed by the installer. Install the CLI only when you need it.
+From a source checkout:
 
-Any host agent can be asked with one sentence:
-
-```text
-Install aiverywhere: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
+```sh
+./install.sh
 ```
 
-### Optional: install the CLI and configure a model
+The host reads:
 
-The interactive flow asks for the model endpoint, credential, model name, and runtime parameters after installation:
+```text
+<project>/.agents/skills/aiverywhere/SKILL.md
+<project>/.aiverywhere/skills/aiverywhere/scripts/
+```
+
+No Python is required.
+
+### Optional CLI
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli
 ```
 
-For unattended installs, provide the model and credential through the environment; all other values use defaults:
+Or:
+
+```sh
+./install.sh --cli
+aiverywhere setup
+```
+
+Non-interactive:
 
 ```sh
 export ANTHROPIC_API_KEY="..."
 export AIVERYWHERE_MODEL="your-model"
-curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
+./install.sh --cli --yes
 ```
 
-Run `aiverywhere setup` later to change the configuration. The installer and setup prompts are currently written in Chinese; the [installation guide](docs/guides/install.en.md) and [usage manual](docs/guides/usage.en.md#configuration) document every field, and `--no-input` is fully language-neutral. See the guide for all options, upgrades, and uninstall steps.
-
-## Verify
+### Verify
 
 ```sh
 aiverywhere --version
@@ -57,138 +151,135 @@ aiverywhere env
 aiverywhere skill --info
 ```
 
-If the optional CLI is not on `PATH`, use its installed `venv/bin/aiverywhere`. In a host session, ask a small verifiable task such as "read this project's README, tell me how to start the console, and cite the evidence". This confirms that the host is using the same working agreement from `.agents/skills/aiverywhere/SKILL.md`.
+## Usage
 
-Local console:
+### Host agent
+
+Point the host at the project skill:
+
+```text
+<project>/.agents/skills/aiverywhere/SKILL.md
+```
+
+The host uses its own model, tools, and permissions.
+
+### Interactive CLI
+
+```sh
+aiverywhere
+```
+
+On a real TTY, the welcome screen opens an interactive prompt:
+
+```text
+aiverywhere ›
+```
+
+Type `/` to open the command menu:
+
+| Command | Purpose |
+| --- | --- |
+| `/help` | Show help |
+| `/jobs` | Show tasks in this process |
+| `/cancel` | Cancel the current task |
+| `/ask <id> <question>` | Ask a follow-up against a completed task |
+| `/quit` | Exit |
+
+Writes and commands are off by default:
+
+```sh
+aiverywhere --allow-write
+aiverywhere --allow-exec
+```
+
+### Local Web console
 
 ```sh
 aiverywhere web
 ```
 
-Open the address printed in the terminal (default `http://127.0.0.1:8765/`; a TTY tries to open the browser by default, while `--no-open` only prints it). "Chat & work" submits tasks directly: read-only by default; enable "Allow project writes" before the model can modify the current project. Session context lives in the current web process and tool receipts appear on the right; restarting the process or switching modes resets the context. The other pages search, create, edit, and delete project memory and skills, revise the agent definition, and browse a read-only log by time. Pages and fonts are served locally. Press Ctrl+C to stop.
+The default URL is `http://127.0.0.1:8765/`. A desktop TTY tries to open it automatically; `--no-open` only prints the URL.
 
-## Entries and capabilities
+## Memory
 
-| Entry | How to start |
-| --- | --- |
-| Any host conversation or native subagent | Read `.agents/skills/aiverywhere/SKILL.md`; use `.aiverywhere/skills/aiverywhere/scripts/` for local memory. Use the host's own model, tools, and permissions. |
-| Standalone CLI | Run `aiverywhere setup`, then run `aiverywhere` for the welcome screen and interactive session, or use `aiverywhere run 'goal'` / `aiverywhere chat`; add `--allow-write` for file writes and `--allow-exec` for commands. |
-| Scheduled work and Dream | The host can run Dream with its current model at its own idle checkpoint; the CLI uses `aiverywhere dream`, an external cron, launchd, or systemd timer calls `wake --dream` periodically. |
-| Personal WeChat | Integrated through a trusted gateway; aiverywhere owns durable tasks, model answers, and receipts. See the [WeChat guide](docs/guides/wechat.en.md). |
-| Local console | `aiverywhere web`; chat and run read-only or explicitly write-enabled tasks in the browser, and manage memory, skills, and logs; binds to loopback only. |
-
-## Tools, workers, and cancellation
-
-The standalone CLI's raw Messages tools include file search, local edits, command execution, and web search/fetch. `list_files`, `read_file`, `search_files`, `web_search`, and `web_fetch` are available by default; `write_file` and `edit_file` require `--allow-write`, and `run_command` requires `--allow-exec`. Writes and commands must stay within the task scope; cancellation terminates the command's process group.
-
-`aiverywhere run` and `aiverywhere chat` let the main model delegate up to two depth-one workers by default. A worker uses the same `Task.run()` and `SKILL.md`, but its file tools operate on a private copy under `work/<main-task>/<worker>/`. The model receives summaries and artifacts and calls `accept_artifact` to copy a verified result into the project. Command availability depends on an actual OS isolation probe: Seatbelt or bubblewrap must be present and usable. Otherwise workers retain restricted file tools but cannot execute commands.
-
-Non-`--json` `run` and `chat` stream the answer; `--json` still emits one final receipt. Ctrl+C cancels the current main task, `/cancel` cancels it, and `/cancel <worker-id>` cancels one worker. Switching tasks never treats an old answer as evidence for a new one.
-
-## Host memory without the CLI
-
-The skill bundle includes POSIX Shell:
+### Shell
 
 ```sh
-sh <skill>/scripts/init-instance.sh
-sh <skill>/scripts/write-memory.sh --kind fact --title 'title' --text 'body' --source task-1
-sh <skill>/scripts/list-memory.sh --kind clue
-sh <skill>/scripts/read-memory.sh <id>
-sh <skill>/scripts/validate-memory.sh < record.json
+SKILL=.agents/skills/aiverywhere
+
+sh "$SKILL/scripts/init-instance.sh"
+sh "$SKILL/scripts/write-memory.sh" \
+  --kind fact \
+  --title 'Monthly unit' \
+  --text 'Monthly reports use ten-thousand yuan.' \
+  --source task-001
+sh "$SKILL/scripts/list-memory.sh" --kind clue
+sh "$SKILL/scripts/read-memory.sh" <id>
 ```
 
-Memory records are `data/memory/<project_key>/<id>.json`, governed by `references/memory-v1.schema.json`. Without `jq`, a host may use native structured validation; Python is not required. The optional CLI reads and writes the same files and schema.
+### CLI
 
-## Configuration
+```sh
+aiverywhere memory put 'Monthly unit' 'Monthly reports use ten-thousand yuan.'
+aiverywhere memory search 'Monthly unit'
+aiverywhere memory search --kind clue
+aiverywhere memory forget <id>
+```
 
-After installing the CLI, `aiverywhere setup` writes `config.json`. Empty sections mean built-in defaults. Everything except the model name and credential has a default value:
+### Record format
 
 ```json
 {
-  "model": {
-    "model": "your-model",
-    "base_url": "https://api.anthropic.com",
-    "max_tokens": 4096
-  },
-  "defaults": {
-    "max_turns": 12,
-    "timeout": 180,
-    "port": 8765
-  },
-  "mcpServers": {},
-  "wechat": {}
+  "schema_version": 1,
+  "id": "0123456789abcdef0123456789abcdef",
+  "revision": 1,
+  "kind": "fact",
+  "title": "Monthly unit",
+  "text": "Monthly reports use ten-thousand yuan.",
+  "source": "task-001",
+  "updated": "2026-11-22T12:00:00Z",
+  "shared": false
 }
 ```
 
-A credential can be stored in the 0600 `config.json`, or only its environment variable name can be saved (`api_key_env`, `auth_token_env`) to keep the secret off disk. See the [usage manual](docs/guides/usage.en.md#configuration) for fields, non-interactive examples, MCP, and WeChat gateway configuration.
+See [memory-v1.schema.json](skills/aiverywhere/references/memory-v1.schema.json).
 
-## Where files live
+## Status
 
-| Path | Purpose |
-| --- | --- |
-| `<project>/.aiverywhere/` | Default project instance; no Python required. |
-| `<project>/.aiverywhere/skills/aiverywhere/` | Standard skill bundle: `SKILL.md`, references, Shell scripts. |
-| `<project>/.aiverywhere/data/memory/<project_key>/` | One JSON file per memory record. |
-| `<project>/.aiverywhere/data/logs/` | Per-task summaries and receipts. |
-| `<project>/.aiverywhere/data/artifacts/` | Worker or task artifacts. |
-| `<project>/.aiverywhere/state.json` | Plans, task claims, and channel receipts; no memory bodies. |
-| `<project>/.aiverywhere/config.json` | Optional CLI model and runtime parameters. |
-| `<project>/.aiverywhere/work/` | Recyclable private worker workspaces. |
-| `<project>/.agents/skills/aiverywhere` | Link to the standard skill bundle. |
+Alpha. Verified locally:
 
-When running from a source checkout, the install root is the checkout; its configuration is `config.json` and its state/logs live in `data/`. Use `--home` to select an install root and `--project` to select the project for this task. To back up, stop writers and copy `config.json` and `data/`.
+- host-only, `--cli`, repeat, and clean-wheel installs;
+- bidirectional Shell/CLI memory access;
+- migration of legacy `state.json` memory;
+- base tool, worker, streaming, and Web paths;
+- a real Bing RSS search.
 
-## Project layout
+Still under verification:
 
-```text
-.github/                    CI, release, issue/PR templates, Dependabot
-docs/guides/                Bilingual install, usage, and WeChat guides
-docs/development/           Design notes and development standards
-docs/CONTRIBUTING.md        Contribution and acceptance requirements
-docs/SECURITY.md            Private vulnerability reporting and security boundaries
-docs/CODE_OF_CONDUCT.md     Code of conduct
-skills/aiverywhere/SKILL.md  The single distributed working agreement
-src/aiverywhere/
-  cli/                      CLI composition root and entry points
-  core/                     agent, store, tools, memory, worker
-  integrations/             web, WeChat, MCP adapters
-  platform/                 environment and sandbox
-  ui/                       welcome and terminal presentation
-tests/                      Standard-library unittest smoke and configuration tests
-install.sh                  One-line installer for any host
-AGENTS.md                   Entry point for coding agents
-CHANGELOG.md                Version history
-Makefile                    Install, test, lint, and build entry points
-pyproject.toml              Package metadata, dependencies, tool config, CLI entry point
-```
+- real personal WeChat and browser channels;
+- long-running interactive TTY use;
+- host-specific skill discovery;
+- deeper source package boundaries and long-term memory indexing.
 
 ## Development
 
 ```sh
-make install
-make check
-make build
-```
-
-Or manually:
-
-```sh
 python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e ".[dev]"
-python -m unittest discover -s tests -v
+.venv/bin/python -m pip install -e '.[dev]'
+make check
 ```
 
-Read the [development guide](docs/development/development.en.md) before submitting changes and include acceptance evidence, observed results, and open verification items. The architecture notes are currently maintained in Chinese.
+This runs Python tests, Shell memory tests, and ShellCheck.
 
 ## Documentation
 
-- [Installation guide](docs/guides/install.en.md): one-line install, optional CLI, upgrades, and uninstall.
-- [Usage manual](docs/guides/usage.en.md): configuration, entries, memory, console, and schedules.
-- [WeChat integration](docs/guides/wechat.en.md): gateway contract, worker, receipts, acceptance, and troubleshooting.
-- [Design notes](docs/development/design.md) (Chinese): architecture, prior art, and verified boundaries.
-- [Development guide](docs/development/development.en.md): layout, change ownership, and acceptance requirements.
-- [Contributing](docs/CONTRIBUTING.en.md) · [Security](docs/SECURITY.en.md) · [Code of Conduct](docs/CODE_OF_CONDUCT.en.md) · [Changelog](CHANGELOG.md) (Chinese)
-- 中文: [README](README.md) · [安装](docs/guides/install.md) · [使用](docs/guides/usage.md) · [开发](docs/development/development.md) · [贡献](docs/CONTRIBUTING.md) · [安全](docs/SECURITY.md)
+- [Install](docs/guides/install.en.md)
+- [Usage](docs/guides/usage.en.md)
+- [WeChat](docs/guides/wechat.en.md)
+- [Design](docs/development/design.md)
+- [Development guide](docs/development/development.en.md)
+- [Chinese README](README.md)
 
-Started by [ChanX96](https://github.com/ChanX96), distributed under the [MIT License](LICENSE).
+## License
+
+[MIT](LICENSE)

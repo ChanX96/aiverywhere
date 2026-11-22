@@ -1,55 +1,183 @@
+<div align="center">
+
 # aiverywhere
 
-**简体中文** | [English](README.en.md)
+**把 skill 当作产品，而不是 CLI 的附属。**
+
+同一份 agent 约定，运行在任意宿主、终端和本地工作台。
 
 [![CI](https://github.com/ChanX96/aiverywhere/actions/workflows/ci.yml/badge.svg)](https://github.com/ChanX96/aiverywhere/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Host shell](https://img.shields.io/badge/host-sh%20%2B%20jq-brightgreen.svg)](#安装)
-[![CLI Python 3.9+](https://img.shields.io/badge/cli-python%203.9%2B-blue.svg)](pyproject.toml)
+[![Host: sh + jq](https://img.shields.io/badge/host-sh%20%2B%20jq-brightgreen.svg)](#仅宿主安装)
+[![CLI: Python 3.9+](https://img.shields.io/badge/cli-python%203.9%2B-blue.svg)](pyproject.toml)
+[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#项目状态)
 
-**让同一个 agent 在任意宿主和终端里工作。** aiverywhere 把目标、必要的上下文和可用工具交给模型。模型选择怎样行动、是否回忆，以及哪些经验值得保存。宿主只安装 skill 时，记忆由 POSIX Shell 和普通 JSON 文件管理；Python/CLI 只在需要本地模型、Web 或 worker 时选装。
+[简体中文](README.md) | [English](README.en.md)
 
-## 核心壳
+</div>
 
-核心只保留四类东西：一份 `SKILL.md`、一个最小模型/工具循环、一个记忆与线索存储、一个宿主/CLI 入口。`init`、`setup`、`link`、`run`、`chat`、`memory`、`dream` 属于核心；`chat` 每行顺序执行，不维护后台队列。
+## 项目说明
 
-`web` 工作台、微信网关、`schedule`/`wake` 调度、MCP 和原生执行器都是可选适配器。`wake` 由外部 cron/launchd/systemd timer 调用一次，不常驻，也不注册系统服务；Dream 由宿主在空闲时用自己的模型完成，或由 CLI 执行一次普通任务。
+`aiverywhere` 是一个 **shell-first 的通用 agent skill**，也可以按需安装成一个独立 CLI。
 
-## 一句话安装
+传统 agent 项目通常先要求安装 Python、创建 venv、配置命令，再把 skill 作为附属文件塞进去。`aiverywhere` 反过来：
 
-仅宿主：macOS 或 Linux、POSIX `sh`；`jq` 可选。可选 CLI：Python 3.9+。在要使用的项目根目录执行：
+- **`SKILL.md` 是核心产品**，任何能读文件、执行命令的宿主都能使用；
+- 宿主只安装 skill 时，记忆、线索和实例初始化全部由 **POSIX Shell + JSON 文件**完成；
+- CLI 是可选宿主，不是使用前提；
+- CLI、宿主、Web、定时任务读写**同一套记忆文件和 schema**。
+
+它适合希望把一套工作约定同时用于 Claude Code、Codex、Cursor、终端脚本、本地 Web 和定时任务的用户。
+
+## 亮点
+
+### 1. 不强制安装 CLI
+
+默认安装只做三件事：
+
+```text
+复制 skill bundle
+创建 .aiverywhere/ 实例
+链接 .agents/skills/aiverywhere
+```
+
+不需要 Python、pip、venv 或模型 Key。没有 CLI，也可以创建、检索、读取和校验记忆。
+
+### 2. 记忆是普通文件
+
+一条记录一个 JSON 文件：
+
+```text
+.aiverywhere/data/memory/<project_key>/<id>.json
+```
+
+- `kind` 支持 `fact`、`skill`、`clue`；
+- 稳定 ID、递增 `revision`、原子写入；
+- JSON Schema 固定格式；
+- `state.json` 只保存计划、任务和渠道回执，不再混入记忆正文。
+
+### 3. 宿主和 CLI 共用记忆
+
+Shell 写下的记录，CLI 可以立即检索；CLI 写入的记录，宿主也能读取。
+
+CLI 写前复用同一份 `validate-memory.sh`；没有 `jq` 时，宿主可以按 schema 做原生校验，或明确标记为“格式待校验”。
+
+### 4. 主动式 skill
+
+`SKILL.md` 不只回答“怎么调工具”，还规定：
+
+- 什么时候应该回忆；
+- 什么值得写成 fact / skill；
+- 什么异常要留下 clue；
+- 什么时候处理旧线索；
+- 什么时候把重复流程沉淀为技能。
+
+Dream、计划、任务回执和 worker 都围绕这套约定工作。
+
+### 5. 工具、worker 和流式输出
+
+- 文件读取、搜索、局部编辑和受控命令执行；
+- 深度 1 的并行 worker、私有工作区和 artifact 交接；
+- SSE 流式正文、CLI 流式输出、Ctrl+C 和 `/cancel`；
+- 本地 Web 工作台、微信网关、MCP 和定时任务等可选适配器；
+- 默认只读，写入和命令执行需要显式授权。
+
+### 6. 免 Key 网页搜索
+
+`web_search` 使用 **Bing RSS** 作为主通道，失败时回退到 **DuckDuckGo HTML**，不再依赖 Tavily Key。
+
+`web_fetch` 只读取公开 HTTP(S) 文本页面，并在每次重定向时拒绝内网、回环和保留地址。
+
+### 7. 本地优先
+
+- 默认实例在项目内：`<project>/.aiverywhere/`；
+- 模型凭据可只保存环境变量名；
+- Web 只绑定回环地址；
+- 页面资源随包分发，不依赖 CDN；
+- 不注册系统服务，不修改 shell 启动文件。
+
+## 架构
+
+```text
+宿主 agent / CLI / Web / 微信 / 定时任务
+                  │
+                  ▼
+             SKILL.md
+                  │
+                  ▼
+       Task 循环 + Tools + Worker
+                  │
+                  ▼
+   .aiverywhere/data/memory/<key>/*.json
+        （宿主与 CLI 共用）
+```
+
+源码按职责分层：
+
+```text
+src/aiverywhere/
+├── cli/                  CLI 命令与组合根
+├── core/                 agent、store、memory、tools、worker
+├── integrations/web/     Web 服务、会话和静态资源
+├── integrations/wechat.py
+├── platform/             环境探测和命令隔离
+└── ui/                   欢迎屏与终端展示
+```
+
+## 快速开始
+
+### 仅宿主安装
+
+要求：macOS / Linux、POSIX `sh`；`jq` 可选。
+
+在项目根目录执行：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
 ```
 
-安装了源码时，也可以直接在仓库根目录运行 `./install.sh`。默认只安装宿主 bundle：把 skill 复制到项目内 `.aiverywhere/skills/aiverywhere`，创建 `.aiverywhere/data/memory/`，并把 `.agents/skills/aiverywhere` 链接到标准 skill 目录。这条路径不需要 Python、pip 或 venv。需要命令行时再加 `--cli`。
+使用源码检出：
 
-对任意宿主 agent 说一句话即可：
-
-```text
-安装 aiverywhere：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
+```sh
+./install.sh
 ```
 
-### 可选：安装 CLI 并配置模型
+安装后：
 
-交互运行会在安装后询问模型端点、凭据、模型名和运行参数：
+```text
+<project>/.agents/skills/aiverywhere/SKILL.md
+<project>/.aiverywhere/skills/aiverywhere/scripts/
+```
+
+宿主读取 `SKILL.md`；需要记忆时调用同目录 `scripts/`。不需要 Python。
+
+### 可选 CLI
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli
 ```
 
-无人值守时用环境变量提供模型与凭据，其余参数使用默认值：
+或从源码：
+
+```sh
+./install.sh --cli
+```
+
+配置模型：
+
+```sh
+aiverywhere setup
+```
+
+无人值守安装：
 
 ```sh
 export ANTHROPIC_API_KEY="..."
-export AIVERYWHERE_MODEL="你的模型名"
-curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
+export AIVERYWHERE_MODEL="your-model"
+./install.sh --cli --yes
 ```
 
-也可以安装完成后运行 `aiverywhere setup` 随时修改。完整选项、升级与卸载见[安装指南](docs/guides/install.md)。
-
-## 先验证
+### 验证安装
 
 ```sh
 aiverywhere --version
@@ -57,139 +185,165 @@ aiverywhere env
 aiverywhere skill --info
 ```
 
-未把可选 CLI 加入 PATH 时，使用它的安装实例 `venv/bin/aiverywhere`。在宿主会话里给一个可核对的小任务，例如“读取本项目 README，告诉我如何启动工作台，并指出依据”，确认宿主读取的是 `.agents/skills/aiverywhere/SKILL.md` 中的同一份工作约定。
+当前项目实例应指向：
 
-本地工作台：
+```text
+<project>/.aiverywhere/
+<project>/.agents/skills/aiverywhere
+```
+
+## 使用
+
+### 宿主 agent
+
+直接把项目交给宿主，或让它读取：
+
+```text
+<project>/.agents/skills/aiverywhere/SKILL.md
+```
+
+宿主使用自己的模型、工具和权限；`aiverywhere` 只提供行为约定和记忆协议。
+
+### 交互式 CLI
+
+```sh
+aiverywhere
+```
+
+在真实 TTY 中会显示欢迎屏并进入交互：
+
+```text
+aiverywhere ›
+```
+
+输入 `/` 会显示命令补全菜单：
+
+| 命令 | 作用 |
+| --- | --- |
+| `/help` | 显示帮助 |
+| `/jobs` | 查看当前进程内的任务 |
+| `/cancel` | 取消当前任务 |
+| `/ask <id> <问题>` | 向已完成任务追加问题 |
+| `/quit` | 退出交互 |
+
+写入和命令执行默认关闭：
+
+```sh
+aiverywhere --allow-write
+aiverywhere --allow-exec
+```
+
+一次性任务：
+
+```sh
+aiverywhere run '读取 README，告诉我如何启动 Web，并指出依据'
+```
+
+### 本地 Web
 
 ```sh
 aiverywhere web
 ```
 
-打开终端显示的地址（默认 `http://127.0.0.1:8765/`；TTY 下默认尝试自动打开浏览器，`--no-open` 只打印地址）。“对话与工作”可直接提交任务：默认只读；开启“允许修改项目文件”后，模型才能写入当前项目。会话上下文保留在当前 web 进程内，右侧显示工具回执；重启进程或切换模式会重置上下文。其余页面可查看、创建、编辑和删除项目记忆与技能，修订 agent 文件，按时间浏览只读日志。页面和字体均在本机加载，按 Ctrl+C 关闭。
-
-## 入口和能力
-
-| 入口 | 怎样开始 |
-| --- | --- |
-| 任意宿主对话或原生子 agent | 读取项目中的 `.agents/skills/aiverywhere/SKILL.md`；需要本地记忆时使用 `.aiverywhere/skills/aiverywhere/scripts/`。沿用宿主的模型、工具和权限。 |
-| 独立 CLI | `aiverywhere setup` 后直接运行 `aiverywhere` 显示欢迎屏并进入交互，或用 `aiverywhere run '目标'` / `aiverywhere chat`；写文件加 `--allow-write`，执行命令加 `--allow-exec`。 |
-| 定时任务和 Dream | Dream 可由宿主在自己的空闲检查点用当前模型执行；CLI 用 `aiverywhere dream`，定时任务由外部 cron、launchd 或 systemd timer 周期调用 `wake --dream`。 |
-| 个人微信 | 由可信网关接入，aiverywhere 负责持久任务、模型答复和回执；见[微信接入指南](docs/guides/wechat.md)。 |
-| 本地工作台 | `aiverywhere web`，在浏览器中对话、执行只读或显式授权写文件的任务，并管理记忆、技能与日志；只绑定回环地址。 |
-
-## 工具、worker 与取消
-
-独立 CLI 的裸 Messages 工具包括文件查找、局部编辑、命令执行和网页搜索/读取。`list_files`、`read_file`、`search_files`、`web_search`、`web_fetch` 默认可用；`write_file`、`edit_file` 需要 `--allow-write`，`run_command` 需要 `--allow-exec`。写入和命令都只应作用于当前任务范围，命令进程在取消时会终止整个进程组。
-
-`aiverywhere run` 和 `aiverywhere chat` 默认允许主模型委派最多 2 个、深度 1 层的 worker。worker 使用同一 `Task.run()` 和 `SKILL.md`，但文件工具运行在 `work/<主任务>/<worker>/` 私有副本中；模型只拿到摘要和 artifact，需要写回时调用 `accept_artifact`。命令是否可用取决于系统隔离探测：本机提供 Seatbelt/bubblewrap 且实际可用时才启用，否则 worker 仍能用受限文件工具，但不能执行命令。
-
-非 `--json` 的 `run` 和 `chat` 会流式显示正文；`--json` 仍只输出一份最终回执。交互中 Ctrl+C 取消当前主任务，`/cancel` 取消当前任务，`/cancel <worker-id>` 只取消指定 worker。切换或重开任务不会把旧回答当作新会话依据。
-
-## 宿主记忆（不安装 CLI）
-
-Skill bundle 自带 POSIX Shell：
+默认尝试打开 `http://127.0.0.1:8765/`；无桌面环境时只打印地址：
 
 ```sh
-sh <skill>/scripts/init-instance.sh
-sh <skill>/scripts/write-memory.sh --kind fact --title '标题' --text '正文' --source task-1
-sh <skill>/scripts/list-memory.sh --kind clue
-sh <skill>/scripts/read-memory.sh <id>
-sh <skill>/scripts/validate-memory.sh < record.json
+aiverywhere web --no-open
 ```
 
-记忆是 `data/memory/<project_key>/<id>.json`，格式由 references/memory-v1.schema.json 统一。没有 `jq` 时，宿主可用原生结构化校验；没有 Python 也能使用。CLI 可选安装，但读写同一批文件和同一个 schema。
+Web 可以对话、管理记忆和 skill、查看日志，并按需授权写文件。
 
-## 配置
+## 记忆
 
-安装 CLI 后，`aiverywhere setup` 写入 `config.json`。空分区表示使用内置默认值。除模型名和凭据外，其余配置都有默认值：
+### Shell 用法
+
+```sh
+SKILL=.agents/skills/aiverywhere
+
+sh "$SKILL/scripts/init-instance.sh"
+sh "$SKILL/scripts/write-memory.sh" \
+  --kind fact \
+  --title '月报单位' \
+  --text '月报统一使用万元。' \
+  --source task-001
+sh "$SKILL/scripts/list-memory.sh" --kind clue
+sh "$SKILL/scripts/read-memory.sh" <id>
+```
+
+### CLI 用法
+
+```sh
+aiverywhere memory put '月报单位' '月报统一使用万元。'
+aiverywhere memory search '月报'
+aiverywhere memory search --kind clue
+aiverywhere memory forget <id>
+```
+
+### 文件格式
 
 ```json
 {
-  "model": {
-    "model": "实际模型名",
-    "base_url": "https://api.anthropic.com",
-    "max_tokens": 4096
-  },
-  "defaults": {
-    "max_turns": 12,
-    "timeout": 180,
-    "port": 8765
-  },
-  "mcpServers": {},
-  "wechat": {}
+  "schema_version": 1,
+  "id": "0123456789abcdef0123456789abcdef",
+  "revision": 1,
+  "kind": "fact",
+  "title": "月报单位",
+  "text": "月报统一使用万元。",
+  "source": "task-001",
+  "updated": "2026-11-22T12:00:00Z",
+  "shared": false
 }
 ```
 
-凭据可写入 0600 的 `config.json`，也可只保存环境变量名（`api_key_env`、`auth_token_env`），避免密钥落盘。字段、非交互示例、MCP 与微信网关配置见[使用手册](docs/guides/usage.md#统一配置)。
+字段约束见 [memory-v1.schema.json](skills/aiverywhere/references/memory-v1.schema.json)。
 
-## 文件放在哪里
+## 项目状态
 
-| 路径 | 用途 |
-| --- | --- |
-| `<项目>/.aiverywhere/` | 默认项目实例；不需要 Python。 |
-| `<项目>/.aiverywhere/skills/aiverywhere/` | 标准 skill bundle：`SKILL.md`、references、Shell 脚本。 |
-| `<项目>/.aiverywhere/data/memory/<project_key>/` | 一条记忆一个 JSON 文件。 |
-| `<项目>/.aiverywhere/data/logs/` | 按任务保存的日志。 |
-| `<项目>/.aiverywhere/data/artifacts/` | worker 或任务产物。 |
-| `<项目>/.aiverywhere/state.json` | 计划、任务认领和渠道回执；不保存记忆。 |
-| `<项目>/.aiverywhere/config.json` | 可选 CLI 的模型与运行参数。 |
-| `<项目>/.aiverywhere/work/` | 可回收的 worker 私有工作区。 |
-| `<项目>/.agents/skills/aiverywhere` | 指向标准 skill bundle 的项目链接。 |
+当前为 alpha 阶段，已在本机验证：
 
-用户级共享实例可用 `--home ~/.aiverywhere` 或 `AIVERYWHERE_HOME`。备份整个 `.aiverywhere/` 即可带走记忆、配置和产物。
+- 仅宿主安装、`--cli` 安装、重复安装和干净 wheel 安装；
+- Shell 与 CLI 双向读写同一记忆；
+- 旧 `state.json` 记忆迁移；
+- 工具、worker、流式输出和 Web 基础路径；
+- Bing RSS 真实搜索。
 
-## 项目结构
+仍待验证或完善：
 
-```text
-.github/                     CI、发布、Issue/PR 模板、Dependabot
-docs/guides/                 中英文安装、使用与微信接入指南
-docs/development/            设计方案与开发规范
-docs/CONTRIBUTING.md         参与方式与验收要求
-docs/SECURITY.md             私下报告安全问题的边界
-docs/CODE_OF_CONDUCT.md      行为准则
-skills/aiverywhere/SKILL.md  随包分发的唯一行为模板
-src/aiverywhere/
-  cli/                       CLI 组合根与命令入口
-  core/                      agent、store、tools、memory、worker
-  integrations/              web、wechat、MCP 适配器
-  platform/                  environment、sandbox
-  ui/                        welcome 与终端展示
-tests/                       标准库 unittest 冒烟与配置测试
-install.sh                   面向任意宿主的一句话安装器
-README.md / README.en.md     中英文项目说明
-AGENTS.md                    编码 agent 的开发入口
-CHANGELOG.md                 版本变更
-Makefile                     安装、测试、检查与构建入口
-pyproject.toml               包元数据、依赖、工具配置和 CLI 入口
-```
+- 真实个人微信、浏览器渠道和 Linux 外部调度；
+- 真实交互 TTY 的长期使用体验；
+- 不同宿主对 skill 的自动发现差异；
+- 更细的源码子包拆分和长期记忆索引。
 
 ## 开发
 
 ```sh
-make install
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
 make check
-make build
 ```
 
-也可手动执行：
+`make check` 包含 Python 测试、Shell memory 测试和 ShellCheck。
+
+单独运行：
 
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e ".[dev]"
-python -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -v
+sh tests/shell/memory.sh
 ```
-
-提交前阅读[开发规范](docs/development/development.md)，并按规范附上验收场景、实际结果和待验证项。
 
 ## 文档
 
-- [安装指南](docs/guides/install.md)：一句话安装、可选 CLI、升级与卸载。
-- [使用手册](docs/guides/usage.md)：配置、入口、记忆、工作台和计划。
-- [微信接入](docs/guides/wechat.md)：网关协议、worker、回执、验收与故障排查。
-- [设计方案](docs/development/design.md)：架构、同类项目调研与已验证的边界。
-- [开发规范](docs/development/development.md)：目录约定、改动归属与验收要求。
-- [参与贡献](docs/CONTRIBUTING.md) · [安全策略](docs/SECURITY.md) · [行为准则](docs/CODE_OF_CONDUCT.md) · [更新日志](CHANGELOG.md)
-- English: [README](README.en.md) · [Installation](docs/guides/install.en.md) · [Usage](docs/guides/usage.en.md) · [Development](docs/development/development.en.md) · [Contributing](docs/CONTRIBUTING.en.md) · [Security](docs/SECURITY.en.md) · [Code of Conduct](docs/CODE_OF_CONDUCT.en.md)
+- [安装指南](docs/guides/install.md)
+- [使用手册](docs/guides/usage.md)
+- [微信接入](docs/guides/wechat.md)
+- [设计方案](docs/development/design.md)
+- [开发规范](docs/development/development.md)
+- [English README](README.en.md)
 
-由 [ChanX96](https://github.com/ChanX96) 发起，按 [MIT 许可证](LICENSE)分发。
+## 贡献
+
+欢迎提交 Issue 和 PR。涉及行为约定的改动请先阅读 [开发规范](docs/development/development.md)，并同步更新 `skills/aiverywhere/SKILL.md` 和相关验收。
+
+## License
+
+[MIT](LICENSE)

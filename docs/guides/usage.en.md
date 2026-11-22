@@ -147,6 +147,8 @@ File tools are `list_files`, `read_file`, `search_files`, `write_file`, and `edi
 
 A main `run`/`chat` task may call `delegate(tasks)` for up to two depth-one workers. Each worker runs in a private copy under `work/<main-task>/<worker>/` with the same `Task.run()`, `SKILL.md`, and memory project, and cannot modify the real project. It returns a summary and artifacts (path, size, SHA-256); the main task verifies them and calls `accept_artifact` to write an authorized target. Command isolation is enabled only after an actual Seatbelt or bubblewrap probe; otherwise a worker keeps restricted file tools but cannot run commands.
 
+On an interactive TTY, type `/` to open the command menu: `/help`, `/jobs`, `/cancel`, `/ask`, and `/quit`.
+
 Non-JSON interactive and one-shot runs stream text; `--json` keeps one final receipt. Ctrl+C cancels the current main task, `/cancel` cancels it, and `/cancel <worker-id>` cancels only that worker. Completed artifacts remain inspectable; operations with unknown external results stay pending verification.
 
 ## Memory, skills, and the local console

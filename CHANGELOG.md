@@ -29,6 +29,8 @@
 - 记忆迁到项目 `.aiverywhere/data/memory/<project_key>/<id>.json`；Python Store 复用 Shell 校验并迁移旧 `state.json` 记忆；`state.json` 只保存计划、任务和渠道回执。
 - `install.sh` 默认仅宿主为纯 Shell；`--cli` 才是可选 Python 安装。
 - 源码按 `cli/core/integrations/platform/ui` 目录重构，保留 `aiverywhere.cli:main`。
+- CLI 交互输入使用 prompt-toolkit；输入 `/` 显示 `/help`、`/jobs`、`/cancel`、`/ask`、`/quit` 菜单。
+- README 重写为 GitHub 项目首页结构，补充亮点、架构、快速开始、状态和开发说明。
 - 网页搜索从 Tavily 切换为免 Key 的 Bing RSS，失败时回退 DuckDuckGo HTML。
 - 欢迎屏改为从 `AIVERYWHERE` 字模生成的可读大字标；CLI 提示改为 `aiverywhere ›` 并支持 `/help`。
 - `aiverywhere web` 在 TTY 桌面环境默认打开浏览器；`--no-open` 关闭。

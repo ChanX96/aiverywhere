@@ -97,6 +97,13 @@ class Configure(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.link_agent()
 
+    def test_cli_exposes_slash_command_menu(self):
+        from aiverywhere.cli.main import SLASH_COMMANDS, _slash_matches
+        commands = {command for command, _ in SLASH_COMMANDS}
+        self.assertEqual(commands, {"/help", "/jobs", "/cancel", "/ask", "/quit"})
+        self.assertEqual({command for command, _ in _slash_matches("/")}, commands)
+        self.assertEqual([command for command, _ in _slash_matches("/he")], ["/help"])
+
     def test_welcome_wordmark_is_generated_from_exact_letters(self):
         self.assertEqual(WORDMARK, "AIVERYWHERE")
         self.assertTrue(set(WORDMARK) <= set(FONT))

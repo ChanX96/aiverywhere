@@ -51,6 +51,10 @@ def parser() -> argparse.ArgumentParser:
                       help="交互式 CLI 允许写入项目文件（也可用 aiverywhere chat --allow-write）")
     root.add_argument("--allow-exec", dest="root_allow_exec", action="store_true",
                       help="交互式 CLI 允许执行命令（也可用 aiverywhere chat --allow-exec）")
+    root.add_argument("--ask-permissions", dest="root_ask_permissions", action="store_true",
+                      help="交互式 CLI 对写文件和命令逐次询问")
+    root.add_argument("--no-network", dest="root_no_network", action="store_true",
+                      help="交互式 CLI 禁用 web_search/web_fetch")
     sub = root.add_subparsers(dest="command")
     sub.add_parser("welcome", help="显示欢迎屏；直接运行 aiverywhere 会显示并进入交互")
     sub.add_parser("init", help="在安装根 data/ 中准备活动 agent 和统一配置，保留已有数据")
@@ -88,6 +92,10 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--task-id", help="宿主分配的请求 ID，同一项目的重复请求返回已有回执")
     chat = sub.add_parser("chat", help="交互式 CLI，一次推进一个前台任务，可 /cancel")
     chat.add_argument("--new", dest="new_session", action="store_true", default=argparse.SUPPRESS, help="开始新的 CLI session")
+    chat.add_argument("--ask-permissions", dest="ask_permissions", action="store_true",
+                      default=argparse.SUPPRESS, help="对写文件和命令逐次询问")
+    chat.add_argument("--no-network", dest="no_network", action="store_true",
+                      default=argparse.SUPPRESS, help="禁用 web_search/web_fetch")
     for command in (run, chat):
         command.add_argument("--model", help="Anthropic 兼容端点的模型名（或 AIVERYWHERE_MODEL）")
         command.add_argument("--mcp", action="append", default=[], metavar="NAME",
@@ -245,6 +253,11 @@ SLASH_COMMANDS = (
     ("/sessions", "列出当前项目的 session"),
     ("/status", "当前 session 和上下文预算"),
     ("/compact", "手动压实当前上下文"),
+    ("/permissions", "查看本次 session 的授权"),
+    ("/grant", "授予本 session 权限：/grant write|exec|network"),
+    ("/revoke", "撤销本 session 权限：/revoke write|exec|network"),
+    ("/approve", "允许当前待确认的工具操作"),
+    ("/deny", "拒绝当前待确认的工具操作"),
     ("/jobs", "查看任务状态"),
     ("/cancel", "取消当前任务"),
     ("/ask", "向已完成任务追加问题：/ask <task-id> <问题>"),
@@ -317,6 +330,56 @@ async def chat(args, store: Store, provider) -> int:
 
     def select_provider():
         return provider() if callable(provider) else provider
+
+    grants = {"write": bool(args.allow_write), "exec": bool(args.allow_exec),
+              "network": not bool(getattr(args, "no_network", False))}
+    ask = {"write": bool(getattr(args, "ask_permissions", False)) and not grants["write"],
+           "exec": bool(getattr(args, "ask_permissions", False)) and not grants["exec"]}
+    if ask["write"]:
+        grants["write"] = True
+    if ask["exec"]:
+        grants["exec"] = True
+    approval_future = None
+
+    async def request_approval(tool: str, values: dict) -> bool:
+        nonlocal approval_future
+        capability = "exec" if tool == "run_command" else "write"
+        if not ask.get(capability):
+            return True
+        if approval_future is not None and not approval_future.done():
+            return False
+        future = asyncio.get_running_loop().create_future()
+        approval_future = future
+        detail = json.dumps(values, ensure_ascii=False)[:700]
+        message(f"权限请求 [{capability}] {tool}: {detail}\n输入 /approve 允许本次，或 /deny 拒绝。")
+        try:
+            allowed = await asyncio.wait_for(future, timeout=300)
+        except asyncio.TimeoutError:
+            allowed = False
+            message("权限请求超时，已拒绝。")
+        finally:
+            approval_future = None
+        if session is not None:
+            try:
+                session.append_permission(f"{capability}:{tool}", allowed, "approval")
+            except (OSError, ValueError):
+                pass
+        return allowed
+
+    def build_task(session_id: str, history: list) -> Task:
+        result = Task(store, writable=grants["write"], exec_allowed=grants["exec"],
+                      network_allowed=grants["network"],
+                      entry="chat", host=args.host, mcp_servers=tuple(args.mcp),
+                      agent_edit=args.agent_edit, allow_workers=True, id=session_id,
+                      approval=request_approval if (ask["write"] or ask["exec"]) else None)
+        result.history = history
+        return result
+
+    def resolve_approval(allowed: bool) -> None:
+        if approval_future is not None and not approval_future.done():
+            approval_future.set_result(allowed)
+        else:
+            message("当前没有待处理的权限请求。")
 
     async def execute(candidate: Task, prompt: str):
         streamed = False
@@ -398,10 +461,7 @@ async def chat(args, store: Store, provider) -> int:
             candidate.load()
             if candidate.resolve_pending():
                 message(f"恢复 session {candidate.id}；上次回合结果未知，已记录待核对。")
-            new_task = Task(store, writable=args.allow_write, exec_allowed=args.allow_exec,
-                            entry="chat", host=args.host, mcp_servers=tuple(args.mcp),
-                            agent_edit=args.agent_edit, allow_workers=True, id=candidate.id)
-            new_task.history = candidate.history()
+            new_task = build_task(candidate.id, candidate.history())
             summary = candidate.summary()
 
             def persist_summary(text: str, method: str, covers: int):
@@ -429,7 +489,9 @@ async def chat(args, store: Store, provider) -> int:
 
     help_text = ("多轮会话：每行续接当前 session，输入 / 显示命令菜单。"
                  "/help 帮助、/new 新会话、/resume 恢复、/sessions 列表、"
-                 "/compact 压实、/status 状态、/jobs 任务、/cancel 取消、/ask 追问、/quit 退出。")
+                 "/compact 压实、/permissions 权限、/grant 或 /revoke 授权、"
+                 "/approve 或 /deny 处理权限请求、/status 状态、"
+                 "/jobs 任务、/cancel 取消、/ask 追问、/quit 退出。")
 
     def prompt():
         if sys.stdin.isatty() and not sys.stdin.closed:
@@ -521,7 +583,8 @@ async def chat(args, store: Store, provider) -> int:
                 tokens = manager.estimate(task.instructions({}), task.history,
                                           list(task.tools.active.values()))
                 message(f"session={info['id']} turns={info['turns']} pending={info['pending']} "
-                        f"summary={info['summary_method'] or '-'} tokens~{tokens}/{manager.max_tokens}")
+                        f"summary={info['summary_method'] or '-'} tokens~{tokens}/{manager.max_tokens} "
+                        f"write={grants['write']} exec={grants['exec']} network={grants['network']}")
                 continue
             if line == "/compact":
                 if current is not None and not current.done():
@@ -535,6 +598,38 @@ async def chat(args, store: Store, provider) -> int:
                         message("当前上下文已压实；原始 session 记录保留。")
                     except (OSError, ValueError) as exc:
                         message(f"压实失败：{exc}")
+                continue
+            if line == "/permissions":
+                for capability in ("write", "exec", "network"):
+                    state = "allowed" if grants[capability] else "denied"
+                    if ask.get(capability):
+                        state += " (ask each time)"
+                    message(f"{capability}: {state}")
+                continue
+            if line.startswith("/grant") or line.startswith("/revoke"):
+                command, _, capability = line.partition(" ")
+                capability = capability.strip()
+                if capability not in {"write", "exec", "network"}:
+                    message("用法：/grant write|exec|network 或 /revoke write|exec|network")
+                    continue
+                if current is not None and not current.done():
+                    message("当前任务仍在运行；完成或取消后再修改授权。")
+                    continue
+                allowed = command == "/grant"
+                grants[capability] = allowed
+                ask[capability] = False
+                if task is None:
+                    message("当前没有会话。")
+                    continue
+                if session is not None:
+                    try:
+                        session.append_permission(capability, allowed, "user")
+                    except (OSError, ValueError) as exc:
+                        message(f"权限审计写入失败：{exc}")
+                task = build_task(session.id, task.history)
+                tasks.clear()
+                tasks[task.id] = task
+                message(f"{capability}: {'已授权本 session' if allowed else '已撤销'}")
                 continue
             if line == "/jobs":
                 for candidate in tasks.values():
@@ -561,7 +656,9 @@ async def chat(args, store: Store, provider) -> int:
                                              return_when=asyncio.FIRST_COMPLETED)
                 if getter in done:
                     incoming = getter.result().strip()
-                    if incoming == "/cancel":
+                    if incoming in {"/approve", "/deny"}:
+                        resolve_approval(incoming == "/approve")
+                    elif incoming == "/cancel":
                         task_handle.cancel()
                     elif incoming.startswith("/cancel "):
                         ident = incoming.split(maxsplit=1)[1].strip()
@@ -705,14 +802,16 @@ async def invoke(args, store: Store) -> int:
 
 
 def welcome_chat(store: Store, new_session: bool = False, allow_write: bool = False,
-                 allow_exec: bool = False) -> int:
+                 allow_exec: bool = False, ask_permissions: bool = False,
+                 no_network: bool = False) -> int:
     import httpx
 
     defaults = store.defaults()
     args = argparse.Namespace(command="chat", json=False, allow_write=allow_write,
                               max_turns=defaults["max_turns"], timeout=defaults["timeout"],
                               host=None, mcp=[], agent_edit=None, model=None, allow_exec=allow_exec,
-                              new_session=new_session)
+                              new_session=new_session, ask_permissions=ask_permissions,
+                              no_network=no_network)
 
     async def run():
         async with httpx.AsyncClient(timeout=60) as client:
@@ -749,7 +848,9 @@ def main(argv=None) -> int:
                 elif configured or os.getenv("AIVERYWHERE_MODEL") or os.getenv("ANTHROPIC_MODEL"):
                     return welcome_chat(store, getattr(args, "new_session", False),
                                         getattr(args, "root_allow_write", False),
-                                        getattr(args, "root_allow_exec", False))
+                                        getattr(args, "root_allow_exec", False),
+                                        getattr(args, "root_ask_permissions", False),
+                                        getattr(args, "root_no_network", False))
                 else:
                     print("  aiverywhere › 尚未配置 CLI 模型；运行 aiverywhere setup 后再对话。", flush=True)
             return 0

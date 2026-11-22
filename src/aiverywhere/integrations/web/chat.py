@@ -20,25 +20,32 @@ class ChatSessions:
         self.lock = threading.Lock()
         self.records: dict[str, dict] = {}
 
-    def _check(self, session, message, writable):
+    def _check(self, session, message, writable, exec_allowed, network_allowed):
         if not isinstance(session, str) or not SESSION.fullmatch(session):
             raise ValueError("会话标识无效")
         if not isinstance(message, str) or not message.strip() or len(message) > MAX_MESSAGE:
             raise ValueError("消息需要 1–32,000 个字符")
-        if type(writable) is not bool:
-            raise ValueError("writable 需要布尔值")
+        if (type(writable) is not bool or type(exec_allowed) is not bool
+                or type(network_allowed) is not bool):
+            raise ValueError("writable、exec 和 network 需要布尔值")
 
-    def start(self, session: str, message: str, writable: bool) -> dict:
-        self._check(session, message, writable)
+    def start(self, session: str, message: str, writable: bool,
+              exec_allowed: bool = False, network_allowed: bool = True) -> dict:
+        self._check(session, message, writable, exec_allowed, network_allowed)
         limits = self.store.defaults()
         with self.lock:
             record = self.records.get(session)
             new = record is None
             if record and record["thread"] and record["thread"].is_alive():
                 raise ValueError("上一条消息仍在处理")
-            if record is None or record["writable"] != writable:
-                record = {"task": Task(self.store, writable=writable, entry="web"),
-                          "writable": writable, "thread": None, "started": 0.0, "finished": None}
+            if (record is None or record["writable"] != writable
+                    or record["exec"] != exec_allowed
+                    or record["network"] != network_allowed):
+                record = {"task": Task(self.store, writable=writable, exec_allowed=exec_allowed,
+                                       network_allowed=network_allowed, entry="web"),
+                          "writable": writable, "exec": exec_allowed,
+                          "network": network_allowed,
+                          "thread": None, "started": 0.0, "finished": None}
                 self.records[session] = record
                 new = True
             thread = threading.Thread(target=self._run, args=(record, message, limits), daemon=True)
@@ -47,7 +54,8 @@ class ChatSessions:
             record["finished"] = None
             thread.start()
             return {"session": session, "task_id": record["task"].id, "status": "running",
-                    "started": record["started"], "writable": writable, "new_session": new}
+                    "started": record["started"], "writable": writable,
+                    "exec": exec_allowed, "network": network_allowed, "new_session": new}
 
     def _run(self, record: dict, message: str, limits: dict) -> None:
         task = record["task"]
@@ -77,7 +85,8 @@ class ChatSessions:
             if record["thread"] and record["thread"].is_alive() and result["status"] in {"queued", "running"}:
                 result["status"] = "running"
             result.update(session=session, started=record["started"], finished=record["finished"],
-                          writable=record["writable"],
+                          writable=record["writable"], exec_allowed=record["exec"],
+                          network_allowed=record["network"],
                           elapsed=max(0.0, (record["finished"] or time.time()) - record["started"]))
             return result
 

@@ -193,6 +193,10 @@ Type `/` to open the command menu:
 | `/sessions` | List project sessions |
 | `/status` | Session, turns, and token estimate |
 | `/compact` | Compact the current context |
+| `/permissions` | Show session grants |
+| `/grant write\|exec\|network` | Grant a capability for this session |
+| `/revoke write\|exec\|network` | Revoke a capability for this session |
+| `/approve` / `/deny` | Allow or deny a pending tool operation |
 | `/jobs` | Show tasks in this process |
 | `/cancel` | Cancel the current task |
 | `/ask <id> <question>` | Ask a follow-up against a completed task |

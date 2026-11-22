@@ -243,6 +243,10 @@ aiverywhere ›
 | `/sessions` | 列出当前项目的 session |
 | `/status` | 当前 session、turn 数、token 估算 |
 | `/compact` | 手动压实当前上下文 |
+| `/permissions` | 查看当前 session 授权 |
+| `/grant write\|exec\|network` | 授予本 session 能力 |
+| `/revoke write\|exec\|network` | 撤销本 session 能力 |
+| `/approve` / `/deny` | 允许或拒绝待确认的工具操作 |
 | `/jobs` | 查看当前进程内的任务 |
 | `/cancel` | 取消当前任务 |
 | `/ask <id> <问题>` | 向已完成任务追加问题 |
@@ -273,7 +277,7 @@ aiverywhere web
 aiverywhere web --no-open
 ```
 
-Web 可以对话、管理记忆和 skill、查看日志，并按需授权写文件。
+Web 可以对话、管理记忆和 skill、查看日志，并按需分别授权写文件、执行命令和联网。
 
 ## 记忆
 

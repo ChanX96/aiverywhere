@@ -410,6 +410,28 @@ class Smoke(unittest.TestCase):
                     time.sleep(0.02)
                 self.assertEqual((state.get("status"), state.get("answer"),
                                   state.get("writable")), ("completed", "网页回答（可写）", True))
+                executable = web.post("/api/chat", json={
+                    "session": "web-chat-exec", "message": "执行模式", "writable": False,
+                    "exec": True})
+                self.assertEqual(executable.status_code, 202, executable.text)
+                state = {}
+                for _ in range(80):
+                    state = web.get("/api/chat", params={"session": "web-chat-exec"}).json()
+                    if state.get("status") != "running":
+                        break
+                    time.sleep(0.02)
+                self.assertTrue(state.get("exec_allowed"))
+                no_network = web.post("/api/chat", json={
+                    "session": "web-chat-network", "message": "无网络", "writable": False,
+                    "network": False})
+                self.assertEqual(no_network.status_code, 202, no_network.text)
+                state = {}
+                for _ in range(80):
+                    state = web.get("/api/chat", params={"session": "web-chat-network"}).json()
+                    if state.get("status") != "running":
+                        break
+                    time.sleep(0.02)
+                self.assertFalse(state.get("network_allowed"))
 
     def test_wechat_after_compaction_restart_and_lost_receipt(self):
         message = {"account": "test-account", "conversation": "original-chat", "message_id": "incoming-17",

@@ -24,7 +24,7 @@ SESSION_SCHEMA = 1
 SESSION_ID = re.compile(r"^[0-9a-f]{32}$")
 EVENT_LIMIT = 16 * 1024 * 1024
 FILE_LIMIT = 256 * 1024 * 1024
-EVENT_TYPES = {"turn_start", "turn", "turn_error", "summary"}
+EVENT_TYPES = {"turn_start", "turn", "turn_error", "summary", "permission"}
 
 
 class SessionError(ValueError):
@@ -269,6 +269,10 @@ class Session:
         return self._append("summary", text=text[:16000], method=method,
                             covers_messages=max(0, covers_messages),
                             covers_turn=covers_turn)
+
+    def append_permission(self, capability: str, allowed: bool, source: str) -> int:
+        return self._append("permission", capability=capability, allowed=bool(allowed),
+                            source=source, task_id=self.id)
 
     def turns(self) -> list[dict]:
         self.load()

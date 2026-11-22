@@ -96,8 +96,8 @@ def validate_arguments(spec: dict, values: dict) -> None:
 class Tools:
     def __init__(self, store: Store, task_id: str, *, writable: bool = False,
                  agent_edit: str | None = None, read_only: bool = False,
-                 exec_allowed: bool = False, workspace: Path | None = None,
-                 allow_workers: bool = False):
+                 exec_allowed: bool = False, network_allowed: bool = True,
+                 workspace: Path | None = None, allow_workers: bool = False):
         self.store = store
         self.task_id = task_id
         self.agent_edit = agent_edit
@@ -117,6 +117,9 @@ class Tools:
             self.available.pop("edit_file", None)
         if not exec_allowed:
             self.available.pop("run_command", None)
+        if not network_allowed:
+            self.available.pop("web_search", None)
+            self.available.pop("web_fetch", None)
         if self.sandbox:
             from ..platform.sandbox import available
             if not available():

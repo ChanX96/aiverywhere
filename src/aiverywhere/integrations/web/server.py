@@ -144,7 +144,9 @@ def create_server(store: Store, port: int) -> ThreadingHTTPServer:
                     return self.reply(405, {"error": "不支持该请求"})
                 data = self.body()
                 return self.reply(202, chat.start(data.get("session"), data.get("message"),
-                                                  data.get("writable", False)))
+                                                  data.get("writable", False),
+                                                  data.get("exec", False),
+                                                  data.get("network", True)))
             if path == "/api/chat/reset" and self.command == "POST":
                 data = self.body()
                 return self.reply(200, chat.reset(data.get("session")))

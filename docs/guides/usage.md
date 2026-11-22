@@ -172,6 +172,35 @@ printf '%s\n' '读 README，返回启动命令和依据。' |
 }
 ```
 
+### CLI 权限与审批
+
+交互式 CLI 默认只读。能力可以在启动时授予，也可以只在当前 session 内授予：
+
+```sh
+aiverywhere --allow-write
+aiverywhere --allow-exec
+aiverywhere --no-network
+```
+
+```text
+/permissions
+/grant write
+/grant exec
+/grant network
+/revoke write
+/revoke exec
+/revoke network
+```
+
+`/grant` 和 `/revoke` 只接受用户输入，不会注册成模型工具；退出 CLI 后授权失效，并写入 session 审计事件。`--ask-permissions` 让 `write_file`、`edit_file`、`run_command` 和 artifact 写入逐次等待：
+
+```text
+/approve
+/deny
+```
+
+模型的权限请求只显示在终端，不能自行批准。Web 工作台对写入、命令和联网使用同样的 Task 权限字段。
+
 ### 工具、worker 与取消
 
 文件工具包括 `list_files`、`read_file`、`search_files`、`write_file` 和 `edit_file`。`write_file`/`edit_file` 需要 `--allow-write`；`edit_file` 用读取到的 SHA-256 和唯一匹配片段，冲突时拒绝覆盖。`run_command(argv, cwd, timeout)` 需要 `--allow-exec`，返回退出码、限长输出和超时标记；取消时会终止进程组。`web_search` 使用免 Key 的 Bing RSS，失败时回退 DuckDuckGo HTML，`web_fetch` 只读取公开文本页面，拒绝内网和保留地址。

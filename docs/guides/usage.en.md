@@ -161,6 +161,31 @@ Commands:
 
 When the context approaches its budget, the kernel summarizes old turns; raw session records are retained. If summarization fails, a deterministic fallback is used. If the compacted request still exceeds the hard limit, the request fails explicitly instead of silently dropping context.
 
+### CLI permissions and approval
+
+The interactive CLI is read-only by default. Capabilities can be granted at launch or for the current session:
+
+```sh
+aiverywhere --allow-write
+aiverywhere --allow-exec
+aiverywhere --no-network
+```
+
+```text
+/permissions
+/grant write|exec|network
+/revoke write|exec|network
+```
+
+`/grant` and `/revoke` are user commands, not model tools. They expire when the CLI exits and are recorded as session audit events. With `--ask-permissions`, `write_file`, `edit_file`, `run_command`, and artifact writes wait for:
+
+```text
+/approve
+/deny
+```
+
+The model can request permission but cannot grant it. The Web console uses the same Task permission fields for writes, commands, and network access.
+
 ### Tools, workers, and cancellation
 
 File tools are `list_files`, `read_file`, `search_files`, `write_file`, and `edit_file`. Writes and edits require `--allow-write`; `edit_file` uses the SHA-256 from the read and a unique fragment, refusing stale or ambiguous edits. `run_command(argv, cwd, timeout)` requires `--allow-exec`, returns an exit code, bounded output, and a timeout flag, and terminates the process group on cancellation. `web_search` uses keyless Bing RSS and falls back to DuckDuckGo HTML; `web_fetch` reads only public text pages and rejects loopback, private, and reserved addresses.

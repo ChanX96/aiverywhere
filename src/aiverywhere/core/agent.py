@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from contextlib import AsyncExitStack
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -310,6 +310,8 @@ class Task:
     store: Store
     writable: bool = False
     exec_allowed: bool = False
+    network_allowed: bool = True
+    approval: Callable[[str, dict], Awaitable[bool]] | None = None
     workspace: Path | None = None
     allow_workers: bool = False
     worker_limit: int = 2
@@ -346,6 +348,7 @@ class Task:
     def tools(self):
         tools = Tools(self.store, self.id, writable=self.writable, agent_edit=self.agent_edit,
                       read_only=self.entry == "dream", exec_allowed=self.exec_allowed,
+                      network_allowed=self.network_allowed,
                       workspace=self.workspace, allow_workers=self.allow_workers)
         if self.mcp_servers:
             fields = DISCOVER["input_schema"]["properties"] | {
@@ -378,6 +381,10 @@ class Task:
         async def execute():
             receipt = {"id": call["id"], "tool": name}
             try:
+                gated = {"write_file", "edit_file", "run_command", "accept_artifact"}
+                if self.approval is not None and name in gated:
+                    if not await self.approval(name, values):
+                        raise PermissionError("用户拒绝了这次操作")
                 if discovery:
                     validate_arguments(self.tools.active[name], values)
                     if values["kind"] != "tool":

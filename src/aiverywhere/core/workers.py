@@ -90,6 +90,7 @@ async def delegate(parent: Task, tasks: list[str], provider) -> dict:
         try:
             workspace, baseline = await asyncio.to_thread(_workspace, parent, index)
             worker = Task(parent.store, writable=True, exec_allowed=parent.exec_allowed,
+                          network_allowed=parent.network_allowed,
                           workspace=workspace, entry="worker", allow_workers=False)
             if parent.worker_callback:
                 worker.activity_callback = lambda action: parent.worker_callback({

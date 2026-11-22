@@ -100,7 +100,7 @@ class Configure(unittest.TestCase):
     def test_cli_exposes_slash_command_menu(self):
         from aiverywhere.cli.main import SLASH_COMMANDS, _slash_matches
         commands = {command for command, _ in SLASH_COMMANDS}
-        self.assertEqual(commands, {"/help", "/new", "/resume", "/sessions", "/status", "/compact", "/jobs", "/cancel", "/ask", "/quit"})
+        self.assertEqual(commands, {"/help", "/new", "/resume", "/sessions", "/status", "/compact", "/permissions", "/grant", "/revoke", "/approve", "/deny", "/jobs", "/cancel", "/ask", "/quit"})
         self.assertEqual({command for command, _ in _slash_matches("/")}, commands)
         self.assertEqual([command for command, _ in _slash_matches("/he")], ["/help"])
 

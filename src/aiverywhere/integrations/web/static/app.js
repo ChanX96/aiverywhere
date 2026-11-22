@@ -117,7 +117,7 @@ const newSessionId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
   : "web-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 let chat = {
-  session: newSessionId(), messages: [], running: false, writable: false,
+  session: newSessionId(), messages: [], running: false, writable: false, exec: false, network: true,
   started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
 };
 
@@ -207,14 +207,18 @@ function chatView() {
         <div class="meta-row"><span>模型</span><b>${esc(modelName)}</b></div>
         <div class="meta-row"><span>执行</span><b>${esc(executor)}</b></div>
         <div class="meta-row"><span>Agent</span><b class="mono">${esc(workspace.agent.revision.slice(0, 8))}</b></div>
-        <div class="meta-row"><span>模式</span><b id="chat-mode-label">${chat.writable ? "可写项目" : "只读"}</b></div>
+        <div class="meta-row"><span>模式</span><b id="chat-mode-label">${chat.writable ? "可写项目" : "只读"}${chat.exec ? " · 可执行" : ""}${chat.network ? "" : " · 无网络"}</b></div>
         <div class="meta-row"><span>会话</span><b class="mono" id="chat-session">${esc(chat.session.slice(0, 8))}</b></div>
       </section>
       <section class="panel">
         <p class="eyebrow">WORK MODE</p>
         <label class="switch-row"><span><b>允许修改项目文件</b><small>仅当前浏览器会话</small></span>
           <input type="checkbox" id="chat-writable" ${chat.writable ? "checked" : ""} aria-label="允许修改项目文件"></label>
-        <p class="faint">关闭时只读。开启后模型可以写入当前项目；切换模式会开始新的上下文。</p>
+        <label class="switch-row"><span><b>允许执行项目命令</b><small>仅当前浏览器会话</small></span>
+          <input type="checkbox" id="chat-exec" ${chat.exec ? "checked" : ""} aria-label="允许执行项目命令"></label>
+        <label class="switch-row"><span><b>允许联网搜索/抓取</b><small>仅当前浏览器会话</small></span>
+          <input type="checkbox" id="chat-network" ${chat.network ? "checked" : ""} aria-label="允许联网"></label>
+        <p class="faint">关闭时只读。开启后模型可以写入项目或执行命令；切换模式会开始新的上下文。</p>
       </section>
       <section class="panel">
         <p class="eyebrow">LAST RECEIPTS</p>
@@ -233,7 +237,7 @@ function paintChat() {
     ? chat.receipts.map(item => `<span class="receipt ${item.ok === false ? "err" : ""}" title="${esc(item.error || item.tool || "tool")}">${esc([item.tool, item.path].filter(Boolean).join(" · ") || "tool")}</span>`).join("")
     : '<span class="faint">尚无工具调用</span>';
   const mode = $("#chat-mode-label");
-  if (mode) mode.textContent = chat.writable ? "可写项目" : "只读";
+  if (mode) mode.textContent = (chat.writable ? "可写项目" : "只读") + (chat.exec ? " · 可执行" : "") + (chat.network ? "" : " · 无网络");
   const badge = $("#chat-mode-badge");
   if (badge) { badge.textContent = chat.writable ? "工作模式" : "只读"; badge.classList.toggle("warn", chat.writable); }
   setChatSend();
@@ -290,7 +294,7 @@ async function sendChat() {
   chat.status = {status: "running"};
   paintChat();
   try {
-    const started = await api("/api/chat", "POST", {session: chat.session, message, writable: chat.writable});
+    const started = await api("/api/chat", "POST", {session: chat.session, message, writable: chat.writable, exec: chat.exec, network: chat.network});
     if (started.new_session && chat.hadSession) {
       chat.messages.splice(chat.messages.length - 2, 0,
         {role: "system", text: "服务端会话已重置；模型上下文从本条消息开始。"});
@@ -330,6 +334,42 @@ async function resetChat() {
   };
   if (page === "chat") render(); else paintChat();
   return true;
+}
+
+async function setChatNetwork(value) {
+  if (chat.running) {
+    toast("当前任务仍在处理，完成后再切换模式。", true);
+    if (page === "chat") render();
+    return;
+  }
+  if (value === chat.network) return;
+  if (chat.messages.length) {
+    if (!confirm("切换网络模式会开始新会话并清空当前上下文，继续吗？")) {
+      if (page === "chat") render();
+      return;
+    }
+    if (!(await resetChat())) return;
+  }
+  chat.network = value;
+  if (page === "chat") render();
+}
+
+async function setChatExec(value) {
+  if (chat.running) {
+    toast("当前任务仍在处理，完成后再切换模式。", true);
+    if (page === "chat") render();
+    return;
+  }
+  if (value === chat.exec) return;
+  if (chat.messages.length) {
+    if (!confirm("切换执行模式会开始新会话并清空当前上下文，继续吗？")) {
+      if (page === "chat") render();
+      return;
+    }
+    if (!(await resetChat())) return;
+  }
+  chat.exec = value;
+  if (page === "chat") render();
 }
 
 async function setChatWritable(value) {
@@ -518,6 +558,8 @@ $("#view").addEventListener("input", event => {
 });
 $("#view").addEventListener("change", event => {
   if (event.target.id === "chat-writable") setChatWritable(event.target.checked).catch(e => toast(e.message, true));
+  if (event.target.id === "chat-exec") setChatExec(event.target.checked).catch(e => toast(e.message, true));
+  if (event.target.id === "chat-network") setChatNetwork(event.target.checked).catch(e => toast(e.message, true));
 });
 $("#view").addEventListener("submit", event => {
   if (event.target.id === "chat-form") { event.preventDefault(); sendChat(); }

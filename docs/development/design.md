@@ -231,6 +231,17 @@ aiverywhere 启动或从休眠恢复时，按当前用户核对上次检查以�
 
 不把某个 App 的页面、接口或流程写进内核。某个 App 的用法先用 skill + `web_search`/`web_fetch` 表达；需要长期复用时写成 memory skill；需要专用协议时接 MCP。只有改变内核原语才发新版本。
 
+### 权限边界与 session 授权
+
+计划属于 skill，授权属于 CLI。模型可以在回复中请求权限，但不能给自己签发权限；`/grant` 和 `/revoke` 只从用户输入进入 CLI，并写入 session 的 `permission` 审计事件。
+
+- 默认只读；`--allow-write`、`--allow-exec` 是启动时授权；
+- `/grant write|exec|network` 和 `/revoke ...` 只影响当前 session，退出即失效；
+- `--ask-permissions` 下写文件、编辑、命令和 artifact 写入逐次等待 `/approve` 或 `/deny`；
+- 权限变化在两次任务之间重建 Task/Tools，保留同一 session、历史和 task_id；
+- Web 工作台使用相同的 Task 权限字段，分别控制写入、命令和联网；
+- 模型不能调用 `/grant`，也不能把授权写入 memory。
+
 ### CLI session 与自动 compaction
 
 CLI 的交互会话按项目存放在 `<实例>/data/sessions/<project_key>/<session_id>.jsonl`。session 文件第一行是 `schema=1` 的头，之后是带递增 `seq` 的 `turn_start`、`turn`、`turn_error` 和 `summary` 事件。原始回合不被重写；`summary` 只改变下一次模型请求使用的上下文视图。

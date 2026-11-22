@@ -176,8 +176,12 @@ BIN_DIR=$(absolute_path "$(expand_path "$BIN_DIR")")
 
 if [ -t 0 ] && [ -t 1 ]; then
     TTY_FD=0
-elif { exec 3</dev/tty; } 2>/dev/null; then
-    TTY_FD=3
+elif (exec 3</dev/tty) 2>/dev/null; then
+    # Test in a subshell: dash exits the whole script on a failed exec in a
+    # compound-list condition. Re-open in the parent only after the probe.
+    if exec 3</dev/tty 2>/dev/null; then
+        TTY_FD=3
+    fi
 fi
 
 case "$WITH_CLI" in

@@ -155,7 +155,7 @@ def ensure(store: Store, *, port: int | None = None, open_browser: str = "never"
         if not _port_available(desired):
             desired = 0
         child = subprocess.Popen(
-            [sys.executable, "-m", "aiverywhere", "--home", str(store.home),
+            [sys.executable, "-u", "-m", "aiverywhere", "--home", str(store.home),
              "--project", str(store.project), "_daemon", "--port", str(desired)],
             cwd=store.project, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
             start_new_session=True, close_fds=True)
@@ -242,6 +242,7 @@ def _channel_worker(store: Store, stopping: threading.Event) -> None:
 
 
 def run_daemon(store: Store, port: int) -> int:
+    print("daemon: starting", flush=True)
     paths = _paths(store)
     lock = paths["runtime_lock"].open("a+b")
     os.fchmod(lock.fileno(), 0o600)
@@ -250,19 +251,23 @@ def run_daemon(store: Store, port: int) -> int:
     except BlockingIOError:
         lock.close()
         return 0
+    print("daemon: lock acquired", flush=True)
     server = None
     stopping = threading.Event()
     try:
         server = create_server(store, port)
+        print(f"daemon: listening on {server.server_port}", flush=True)
         info = {"pid": os.getpid(), "port": server.server_port,
                 "token": server.token, "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "home": str(store.home), "project": str(store.project)}
         atomic_write(paths["info"], (json.dumps(info, ensure_ascii=False) + "\n").encode(), mode=0o600)
+        print("daemon: readiness written", flush=True)
         web = threading.Thread(target=server.serve_forever, name="aiverywhere-web", daemon=True)
         worker = threading.Thread(target=_channel_worker, args=(store, stopping),
                                   name="aiverywhere-channel", daemon=True)
         web.start()
         worker.start()
+        print("daemon: threads started", flush=True)
 
         def terminate(signum, frame):
             stopping.set()

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import secrets
+import socketserver
 import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -288,7 +289,16 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
 
         do_GET = do_HEAD = do_POST = do_PUT = do_DELETE = handle_request
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    class LoopbackServer(ThreadingHTTPServer):
+        def server_bind(self):
+            # HTTPServer.server_bind() calls socket.getfqdn(), which can block
+            # for many seconds on CI runners without usable reverse DNS.
+            socketserver.TCPServer.server_bind(self)
+            host, port = self.server_address[:2]
+            self.server_name = host
+            self.server_port = port
+
+    server = LoopbackServer(("127.0.0.1", port), Handler)
     server.token = token
     return server
 

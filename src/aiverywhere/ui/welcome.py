@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from .. import __version__
 from ..core.store import Store, skill_revision, skill_text
+from ..integrations.bridges.registry import discover as discover_bridges
 
 WORDMARK = "AIVERYWHERE"
 # 5x7 block font. Rows are joined from this map, so the spelling is checked by
@@ -132,6 +133,10 @@ def render(store: Store) -> str:
     except (OSError, ValueError):
         items = []
     clues = sum(item.get("kind") == "clue" for item in items)
+    try:
+        bridge_count = len(discover_bridges(store))
+    except (OSError, ValueError):
+        bridge_count = 0
     lines += [
         _line("模式", "CLI" if model else "宿主模式（使用宿主模型）"),
         _line("项目", _compact_path(store.project)),
@@ -139,6 +144,7 @@ def render(store: Store) -> str:
         _line("模型", _model_description(model)),
         _line("Agent", revision),
         _line("记忆", f"{len(items) - clues} 条事实/技能  ·  {clues} 条线索"),
+        _line("Bridge", f"{bridge_count} 个已发现"),
         _line("访问", "网页可用 · worker 可用；--allow-write 写入 · --allow-exec 命令"),
         rule,
         "  " + _paint("1;36", "aiverywhere ›") + " 输入任务开始"

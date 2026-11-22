@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from ...core.store import RevisionConflict, Store, file_version, skill_revision, skill_text
 from .chat import ChatSessions
+from ..bridges.registry import discover as discover_bridges
 
 
 def log_page(store: Store, before: int | None = None, limit: int = 50) -> dict:
@@ -56,6 +57,7 @@ def overview(store: Store) -> dict:
     except (OSError, ValueError):
         model = {}
     return {"project": str(store.project), "directory": str(store.data), "memory": items,
+            "bridges": discover_bridges(store, check_health=True),
             "model": {"name": model.get("model"), "base_url": model.get("base_url"),
                       "max_tokens": model.get("max_tokens"), "configured": bool(model),
                       "executor": "native" if "command" in model else "messages"},

@@ -8,6 +8,49 @@ Host-only installation needs macOS or Linux with POSIX `sh`; `jq` is optional. T
 Install aiverywhere: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
 ```
 
+## Installation options
+
+### A. Agent installs only the skill (recommended for hosts)
+
+```text
+Install the aiverywhere skill: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
+```
+
+Requires POSIX `sh` only; no Python or CLI.
+
+### B. Agent installs the skill and CLI
+
+```text
+Install the aiverywhere CLI: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
+```
+
+Requires Python 3.9+; model configuration can come from environment variables.
+
+### C. Install the skill manually
+
+```sh
+cp -R skills/aiverywhere <project>/.aiverywhere/skills/aiverywhere
+sh <project>/.aiverywhere/skills/aiverywhere/scripts/init-instance.sh <project>
+ln -s <project>/.aiverywhere/skills/aiverywhere <project>/.agents/skills/aiverywhere
+```
+
+### D. Install the CLI manually
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/aiverywhere init
+.venv/bin/aiverywhere setup
+.venv/bin/aiverywhere link
+```
+
+### E. Bridge plugins
+
+Optional resident bridges live in `bridges/<bridge-id>/bridge.json` under
+the project or instance. See [bridges/README.md](../../bridges/README.md).
+The CLI and Web console only read manifests and health state; bridge code is
+never imported or executed by the core.
+
 ## 1. One-line installation
 
 Run this in the **project root** you want to use:
@@ -136,19 +179,19 @@ aiverywhere --home <new-install-root> --project <project> init
 aiverywhere --home <new-install-root> --project <project> link
 ```
 
-**Uninstall**: confirm the install root first, then remove the command link and project link. `config.json` and `data/` contain credentials, memory, and logs and cannot be recovered after deletion.
-
-Stop any cron, launchd, or systemd timer you added first (the current version has no built-in service), then back up and remove:
+**Uninstall**: stop the supervisor, then confirm the instance root. `.aiverywhere/` contains configuration, memory, sessions, logs, and artifacts; deletion is irreversible.
 
 ```sh
-cp -a ~/.aiverywhere/data ~/aiverywhere-data-backup
+aiverywhere stop
+# project instance:
+rm -f <project>/.agents/skills/aiverywhere
+rm -rf <project>/.aiverywhere
+# user-level instance:
 rm -f ~/.local/bin/aiverywhere
-rm -f <project>/.agents/skills/aiverywhere/SKILL.md
-rmdir <project>/.agents/skills/aiverywhere 2>/dev/null || true
 rm -rf ~/.aiverywhere
 ```
 
-To remove only the CLI and keep memory/configuration, do not delete `~/.aiverywhere/config.json` or `~/.aiverywhere/data/`.
+To remove only the CLI and keep memory/configuration, do not delete `config.json`, `data/`, or `skills/`. Bridge platform accounts are managed by each bridge and are not removed by aiverywhere.
 
 ## Troubleshooting
 

@@ -33,6 +33,7 @@
 - CLI 交互改为单会话多轮：连续输入共享同一个 Task 历史和 task_id，`/new` 才显式切换会话；修复退出时 `reader` 为 `None` 的回溯。
 - `web_search` 对日期/年份重的查询自动补一次短查询并按关键词排序；环境摘要加入 now/timezone/network grant，worker 继承审批。
 - 修复 `Tools.execute` 对 `web_search`、`web_fetch`、`run_command` 的分派遗漏；TTY 改为顺序 prompt，任务结束稳定回到 `aiverywhere ›`。
+- 增加 `bridges/` 插件目录、公共 Bridge 抽象类、manifest 自动发现、CLI/Web 状态展示和安装/卸载多种方式。
 - 增加常驻单实例 supervisor、`start/stop/status`、自动 Web、`/api/channels/<id>/messages` 通用入站和回复路由；WeChat/飞书/iMessage 共用 channel envelope。
 - 模型协议增加 OpenAI Chat Completions、Ollama 和 custom OpenAI-compatible；setup 支持 protocol/chat_path。
 - 环境摘要加入 `now`、`timezone` 和 network grant；worker 继承父任务的逐次审批回调。

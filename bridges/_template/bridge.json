@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "id": "template",
+  "name": "Template bridge",
+  "channel": "template",
+  "description": "Copy this directory and implement the native platform side.",
+  "enabled": false,
+  "command": ["python3", "bridge.py"],
+  "health_url": "http://127.0.0.1:8787/health",
+  "version": "0.1.0",
+  "homepage": ""
+}

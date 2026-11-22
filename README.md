@@ -132,16 +132,34 @@ aiverywhere
 源码按职责分层：
 
 ```text
+bridges/                   可发现的常驻 bridge 插件目录和模板
 src/aiverywhere/
 ├── cli/                  CLI 命令与组合根
 ├── core/                 agent、store、memory、tools、worker
 ├── integrations/web/     Web 服务、会话和静态资源
+├── integrations/bridges/ bridge 抽象类、模板发现和健康检查
 ├── integrations/wechat.py
 ├── platform/             环境探测和命令隔离
 └── ui/                   欢迎屏与终端展示
 ```
 
 ## 快速开始
+
+### 交给 agent 的一句话
+
+只装 skill，不装 CLI：
+
+```text
+安装 aiverywhere skill：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
+```
+
+安装 skill + 可选 CLI：
+
+```text
+安装 aiverywhere CLI：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
+```
+
+手动安装、bridge 插件和卸载见[安装指南](docs/guides/install.md#选择安装方式)。
 
 ### 仅宿主安装
 

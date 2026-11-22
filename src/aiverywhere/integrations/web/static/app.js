@@ -72,12 +72,27 @@ function activity() {
     <div class="panel-foot"><span>${workspace.logs.before ? "基于最近 50 条日志" : "来自项目日志"}</span><a class="text-button" href="#logs">查看日志</a></div></section>`;
 }
 
+function bridgesPanel() {
+  const bridges = workspace.bridges || [];
+  const rows = bridges.map(item => {
+    const health = item.health ? (item.health.ok ? "在线" : "不可达") : (item.enabled ? "已登记" : "未启用");
+    return `<tr><td><b>${esc(item.name)}</b><div class="meta mono">${esc(item.id)}</div></td>
+      <td><span class="kind">${esc(item.channel)}</span></td>
+      <td>${item.channel_configured ? '<span class="badge">已配置</span>' : '<span class="faint">未配置</span>'}</td>
+      <td>${esc(health)}</td><td class="meta mono" title="${esc(item.path)}">${esc(item.command.join(" ") || "—")}</td></tr>`;
+  }).join("");
+  return `<section class="panel"><div class="panel-head"><h2>Bridge 插件</h2><small>${bridges.length} 个</small></div>
+    ${bridges.length ? `<div class="table-wrap"><table><thead><tr><th>Bridge</th><th>Channel</th><th>配置</th><th>健康</th><th>启动命令</th></tr></thead><tbody>${rows}</tbody></table></div>` :
+      empty("layers", "还没有 bridge", "把 bridge 目录放到项目的 bridges/，编写 bridge.json 后刷新。")}
+    <div class="panel-foot"><span>核心只读取 manifest，不导入 bridge 代码</span><a class="text-button" href="https://github.com/ChanX96/aiverywhere/blob/main/bridges/README.md" target="_blank" rel="noreferrer">开发说明</a></div></section>`;
+}
+
 function overview() {
   const facts = workspace.memory.filter(i => i.kind === "fact").length;
   const stats = [["layers","项目记忆",facts],["spark","已学技能",workspace.memory.length - facts],
     ["terminal","近期运行",String(workspace.logs.rows.length) + (workspace.logs.before ? "+" : "")]];
   return `<div class="stats">${stats.map(([icon,label,value]) => `<div class="stat"><div class="stat-label"><i class="ico ${icon}"></i>${label}</div><strong class="stat-number">${value}</strong></div>`).join("")}</div>
-    <div class="split">${agentPreview()}${activity()}</div><section class="panel">
+    <div class="split">${agentPreview()}${activity()}</div>${bridgesPanel()}<section class="panel">
     <div class="panel-head"><h2>最近更新</h2><a class="text-button" href="#memory">全部条目</a></div>${memoryTable(workspace.memory.slice(0,5))}</section>`;
 }
 

@@ -96,16 +96,34 @@ Host agent / CLI / Web / WeChat / scheduler
 Source layout:
 
 ```text
+bridges/                   Discoverable resident bridge plugins and template
 src/aiverywhere/
 ├── cli/                  CLI commands and composition root
 ├── core/                 agent, store, memory, tools, workers
 ├── integrations/web/     Web server, chat sessions, static assets
+├── integrations/bridges/ Bridge abstraction, manifest discovery, health
 ├── integrations/wechat.py
 ├── platform/             environment and sandbox
 └── ui/                   welcome screen and terminal presentation
 ```
 
 ## Quick start
+
+### One sentence for an agent
+
+Skill only:
+
+```text
+Install the aiverywhere skill: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
+```
+
+Skill plus optional CLI:
+
+```text
+Install the aiverywhere CLI: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
+```
+
+Manual installation, bridge plugins, and uninstall are covered in the [installation guide](docs/guides/install.en.md#installation-options).
 
 ### Host-only install
 

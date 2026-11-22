@@ -89,6 +89,7 @@ def parser() -> argparse.ArgumentParser:
     publication.add_argument("--info", action="store_true", help="准备实例活动文件，输出路径及内容修订号")
     publication.add_argument("--update", metavar="REV", type=revision, help="从标准输入发布完整文件，核对旧修订")
     sub.add_parser("env", help="只读查看本地运行环境、已授权范围和未验证能力")
+    sub.add_parser("bridges", help="列出项目/实例中的 bridge 插件和健康状态")
     start = sub.add_parser("start", help="启动常驻 supervisor 和 Web")
     start.add_argument("--port", type=int, choices=range(0, 65536), metavar="0-65535")
     sub.add_parser("stop", help="停止常驻 supervisor")
@@ -862,6 +863,10 @@ def main(argv=None) -> int:
         if args.command == "_daemon":
             from ..core.supervisor import run_daemon
             return run_daemon(store, args.port if args.port is not None else store.defaults()["port"])
+        if args.command == "bridges":
+            from ..integrations.bridges.registry import discover
+            print_json(discover(store, check_health=True))
+            return 0
         if args.command in {"start", "stop", "status"}:
             from ..core import supervisor
             if args.command == "start":
@@ -873,7 +878,10 @@ def main(argv=None) -> int:
             if args.command == "stop":
                 print(json.dumps(supervisor.stop(store), ensure_ascii=False))
                 return 0
-            print(json.dumps(supervisor.status(store), ensure_ascii=False))
+            from ..integrations.bridges.registry import discover
+            payload = supervisor.status(store)
+            payload["bridges"] = discover(store, check_health=True)
+            print(json.dumps(payload, ensure_ascii=False))
             return 0
         if args.command == "web":
             from ..core import supervisor

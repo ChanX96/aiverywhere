@@ -8,6 +8,55 @@
 安装 aiverywhere：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
 ```
 
+## 选择安装方式
+
+### A. 让 agent 只安装 skill（推荐给宿主）
+
+把下面一句话交给 agent：
+
+```text
+安装 aiverywhere skill：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
+```
+
+它只需要 POSIX `sh`，不需要 Python 或 CLI。
+
+### B. 让 agent 安装 skill + CLI
+
+```text
+安装 aiverywhere CLI：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh -s -- --cli --yes
+```
+
+需要 Python 3.9+；模型配置可通过环境变量传入。
+
+### C. 手动安装 skill
+
+```sh
+cp -R skills/aiverywhere <项目>/.aiverywhere/skills/aiverywhere
+sh <项目>/.aiverywhere/skills/aiverywhere/scripts/init-instance.sh <项目>
+ln -s <项目>/.aiverywhere/skills/aiverywhere <项目>/.agents/skills/aiverywhere
+```
+
+### D. 手动安装 CLI
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/aiverywhere init
+.venv/bin/aiverywhere setup
+.venv/bin/aiverywhere link
+```
+
+### E. Bridge 插件
+
+项目或实例的 `bridges/` 目录用于可选常驻 bridge：
+
+```text
+<项目>/bridges/<bridge-id>/bridge.json
+<实例>/bridges/<bridge-id>/bridge.json
+```
+
+模板和抽象类见 [bridges/README.md](../../bridges/README.md)。CLI 和 Web 只读取 manifest 和健康状态，不导入或执行 bridge 代码。
+
 ## 1. 一句话安装
 
 在要使用的**项目根目录**执行：
@@ -121,7 +170,7 @@ aiverywhere run --json '读 README，告诉我怎样启动工作台。'
 aiverywhere web
 ```
 
-打开打印的地址。端口占用时加 `--port 0` 自动选取。按 Ctrl+C 停止。工作台无需模型和网络账号。
+打开打印的地址。`aiverywhere web` 会确保常驻 supervisor 并提供地址，不会阻塞终端；端口占用时会选择空闲端口，也可用 `--port` 指定。停止用 `aiverywhere stop`。工作台无需模型和网络账号。
 
 ## 5. 升级、迁移与卸载
 
@@ -133,19 +182,19 @@ aiverywhere web
 aiverywhere --home <新安装根> --project <项目> init
 ```
 
-**卸载**：先确认要删除的安装根，再移除命令链接和项目链接。`.aiverywhere/` 包含配置、记忆、日志和产物，删除后不可恢复。
-
-先停止你自己添加的 cron、launchd 或 systemd timer（当前版本不内置服务），再备份并删除：
+**卸载**：先停止 supervisor，再确认要删除的实例根。`.aiverywhere/` 包含配置、记忆、session、日志和产物，删除后不可恢复。
 
 ```sh
-cp -a ~/.aiverywhere/data ~/aiverywhere-data-backup
+aiverywhere stop
+# 如果使用项目实例：
+rm -f <项目>/.agents/skills/aiverywhere
+rm -rf <项目>/.aiverywhere
+# 如果使用用户级实例：
 rm -f ~/.local/bin/aiverywhere
-rm -f <项目>/.agents/skills/aiverywhere/SKILL.md
-rmdir <项目>/.agents/skills/aiverywhere 2>/dev/null || true
 rm -rf ~/.aiverywhere
 ```
 
-只卸载 CLI、保留记忆和配置时，不要删除 `~/.aiverywhere/config.json` 或 `~/.aiverywhere/data/`。
+只卸载 CLI、保留记忆和配置时，不要删除 `~/.aiverywhere/config.json`、`data/` 或 `skills/`。桥接器和平台登录由 bridge 自己管理；卸载 aiverywhere 不会删除 bridge 的账号数据。
 
 ## 故障排查
 

@@ -141,7 +141,7 @@ function projectPanel() {
   return `<section class="panel"><div class="panel-head"><h2>项目空间</h2><span class="badge">当前实例</span></div>
     <div class="project-card"><code>${esc(workspace.project)}</code><p>这个 Web 绑定当前项目实例。切换项目时，在目标项目目录启动另一个 supervisor：</p>
     <pre class="command">cd /目标项目
-aiverywhere</pre><p class="fine">项目本地实例位于目标项目的 <code>.aiverywhere/</code>；不要在一个 Web 中任意切换到未登记路径。</p></div></section>`;
+aiverywhere</pre><p class="fine">项目本地实例位于目标项目的 <code>.aiverywhere/</code>。一个用户级实例同一时间绑定一个项目；不要在一个 Web 中任意切换到未登记路径。</p></div></section>`;
 }
 
 function sessionsView() {

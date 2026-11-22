@@ -256,7 +256,7 @@ The console's "Chat & work" page submits tasks to the current instance. It is re
 
 "Agent definition" edits the whole bundle: `SKILL.md`, `references/*.md|json`, and `scripts/*.sh`. Each file has a content-hash revision check; the main file keeps the live-version rules.
 
-**Project spaces**: one Web server is bound to one project instance and does not switch to arbitrary paths. To switch, launch `aiverywhere` in the target project; it uses that project's `.aiverywhere/` (or the user-level instance), with its own port and supervisor. Do not read unregistered project paths from one console.
+**Project spaces**: one Web server is bound to one project instance and does not switch to arbitrary paths. To switch, launch `aiverywhere` in the target project; it prefers that project's `.aiverywhere/`, with its own port and supervisor. A user-level instance binds one project at a time; run concurrent projects with separate project-local homes. Do not read unregistered project paths from one console.
 
 In the console, use "Memory and skills" to search by title, open a title to view or edit it, and cancel before deleting. "Agent definition" edits the instance-wide working agreement. While the console is open, external edits usually appear within 3 seconds. The page keeps local drafts and reports a conflict when saving an older revision. Deleting the local definition restores the distributed template; `skill --info` recreates the live file for hosts.
 

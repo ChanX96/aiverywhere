@@ -217,6 +217,12 @@ aiverywhere 启动或从休眠恢复时，按当前用户核对上次检查以�
 
 源码或专用虚拟环境内可以直接运行，使用共享 Python 时显式选择 `--home`。默认启动、读取 skill、查看环境以及 `wake` 均不注册系统服务。安装器只在用户选择的安装根写入虚拟环境、`config.json`、`data/` 和可回收的 `work/`，并可选创建一个 `~/.local/bin` 命令链接和一个项目技能链接；不请求 `sudo`，不修改 shell 启动文件，不写入 cron、launchd 或 systemd 注册文件。已有宿主可按路径读取文件，用户无需全局安装 skill。外部调度器由用户自行管理；后台运行所需的凭据及宿主自身的缓存、日志与权限由该宿主配置管理。
 
+### Web 工作台、会话与项目空间
+
+Web 是 supervisor 托管的单项目控制面。对话 session 仍是 Web 进程内的临时上下文；CLI session 是追加式 JSONL 持久会话，Web 的“会话与任务”页只读取并展示这些 session 和恢复命令，避免两个进程同时写同一会话。一个 Web 绑定一个项目实例，不提供任意路径切换；切换项目使用目标项目的 `.aiverywhere/` 或用户级实例启动另一个 supervisor。
+
+Agent 页面编辑完整 bundle：`SKILL.md`、`references/*.md|json`、`scripts/*.sh`。主文件沿用活动版本修订；其他文件使用内容哈希做并发检查，路径和扩展名在服务端限制。日志页按 task 展示，概览和运行记录提供入口。
+
 ### 常驻 supervisor 与通用通道
 
 CLI 默认确保一个单实例 supervisor 运行。它持有实例内的 PID/端口/token/日志，托管本地 Web 和 channel worker；CLI 退出不会终止它。`aiverywhere start/stop/status` 显式管理，不注册系统服务。

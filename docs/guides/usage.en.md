@@ -161,7 +161,13 @@ Retrying the same request ID in the same project returns the original task recei
 
 ### CLI sessions and automatic compaction
 
-The interactive CLI resumes the latest session for the project by default. Each session is an append-only JSONL file:
+The interactive CLI resumes the latest session for the project by default. Resume a specific session directly with:
+
+```sh
+aiverywhere chat --resume <session-id>
+```
+
+Each session is an append-only JSONL file:
 
 ```text
 <instance>/data/sessions/<project_key>/<session_id>.jsonl
@@ -246,13 +252,17 @@ aiverywhere web
 
 `link` creates only a symbolic link to the live agent and is idempotent; it refuses to overwrite a link that points somewhere else. Hosts that follow the project skill directory convention discover it; other hosts read the absolute path from `skill --info`.
 
-The console's "Chat & work" page submits tasks to the current instance. It is read-only by default; project writes, command execution, and network access can be enabled separately. Web session context lives in the current web process and resets when switching modes or restarting the process; CLI durable sessions are a separate entry. Tool receipts appear on the right. If no model is configured, the page reports the error instead of silently degrading.
+The console's "Chat & work" page submits tasks to the current instance. It is read-only by default; project writes, command execution, and network access can be enabled separately. **A session is a durable conversation; a task is one execution.** CLI sessions live in `data/sessions/` and can be resumed with `aiverywhere chat --resume <id>` or `/resume <id>` inside chat. Web chat context lives in the current supervisor process and resets when switching modes or restarting it. The "Sessions & tasks" page lists durable CLI sessions and resume commands; "Run log" lists tasks. Tool receipts appear on the right. If no model is configured, the page reports the error instead of silently degrading.
+
+"Agent definition" edits the whole bundle: `SKILL.md`, `references/*.md|json`, and `scripts/*.sh`. Each file has a content-hash revision check; the main file keeps the live-version rules.
+
+**Project spaces**: one Web server is bound to one project instance and does not switch to arbitrary paths. To switch, launch `aiverywhere` in the target project; it uses that project's `.aiverywhere/` (or the user-level instance), with its own port and supervisor. Do not read unregistered project paths from one console.
 
 In the console, use "Memory and skills" to search by title, open a title to view or edit it, and cancel before deleting. "Agent definition" edits the instance-wide working agreement. While the console is open, external edits usually appear within 3 seconds. The page keeps local drafts and reports a conflict when saving an older revision. Deleting the local definition restores the distributed template; `skill --info` recreates the live file for hosts.
 
 A long-running raw Messages CLI rereads the current agent before every model request. New interactive CLI tasks and follow-ups reread the executor configuration when they start. Native hosts reread at the checkpoints described in the working agreement; a command that receives one standard-input payload keeps what it received. Memory and skills use the current revision when recalled. [How running processes see changes](../development/design.md#运行中的文件变更) (Chinese)
 
-"Run log" shows the current project's tasks newest first and can load older entries. The log is read-only. The console binds to `127.0.0.1`, accepts only same-origin local requests, checks a page token, serves its front-end assets from the package, and works fully offline. `--port 0` picks a free port.
+"Run log" shows the current project's tasks newest first and can load older entries. Selecting a task id opens its run record; overview statistics and "Run log" link directly to it. The log is read-only. The console binds to `127.0.0.1`, accepts only same-origin local requests, checks a page token, serves its front-end assets from the package, and works fully offline. `--port 0` picks a free port.
 
 The model recalls only the small amount of memory needed for the current task. To require confirmation before using a verified skill across projects, set `aiverywhere memory policy ask`; after the user agrees, pass the global `--confirm-shared` for that one call. Ordinary project facts stay in their source project.
 

@@ -15,6 +15,7 @@
       <a href="#overview" data-page="overview"><i class="ico grid" aria-hidden="true"></i>实例概览</a>
       <a href="#memory" data-page="memory"><i class="ico layers" aria-hidden="true"></i>记忆与技能</a>
       <a href="#agent" data-page="agent"><i class="ico file" aria-hidden="true"></i>Agent 定义</a>
+      <a href="#sessions" data-page="sessions"><i class="ico spark" aria-hidden="true"></i>会话与任务</a>
       <a href="#logs" data-page="logs"><i class="ico terminal" aria-hidden="true"></i>运行日志</a>
     </nav>
     <div class="rail-foot"><i class="ico terminal" aria-hidden="true"></i><div>本地服务<span id="address"></span></div></div>
@@ -42,6 +43,8 @@
   <dialog id="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-info"><div class="dialog-title"><h2 id="confirm-title">确认删除</h2></div>
     <p id="confirm-info"></p><div class="dialog-actions"><span></span>
       <button class="secondary" id="confirm-no" autofocus>取消</button><button class="danger solid" id="confirm-yes">确认删除</button></div></dialog>
+  <dialog id="detail" aria-labelledby="detail-title"><div class="dialog-title"><h2 id="detail-title">详情</h2><button class="icon-button close" type="button" aria-label="关闭">×</button></div>
+    <pre id="detail-body" class="detail-body"></pre><div class="dialog-actions"><span></span><button class="secondary close" type="button">关闭</button></div></dialog>
   <div class="toast" id="toast" role="status" hidden></div>
 </body>
 </html>

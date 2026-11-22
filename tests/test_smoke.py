@@ -366,6 +366,40 @@ class Smoke(unittest.TestCase):
             self.assertEqual(web.request("DELETE", "/api/agent", json={"revision": changed.json()["revision"]}).status_code, 200)
             self.assertEqual(web.get("/api/workspace").json()["agent"]["text"], agent["text"])
 
+    def test_web_agent_bundle_and_durable_session_history(self):
+        self.store.initialize()
+        ref = self.store.skill_dir / "references" / "web-test.md"
+        ref.parent.mkdir(exist_ok=True)
+        ref.write_text("原始参考。\n")
+        sessions = SessionStore(self.store)
+        session = sessions.create()
+        turn = session.begin_turn("历史问题")
+        session.finish_turn(turn, [
+            {"role": "user", "content": "历史问题"},
+            {"role": "assistant", "content": "历史回答"}], "历史回答")
+        session.release()
+        server = create_server(self.store, 0)
+        self.addCleanup(server.server_close)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        with httpx.Client(base_url=f"http://127.0.0.1:{server.server_port}", trust_env=False) as web:
+            page = web.get("/")
+            web.headers["X-Aiverywhere-Token"] = re.search(
+                r'name="session" content="([^"]+)"', page.text)[1]
+            workspace = web.get("/api/workspace").json()
+            files = {item["path"]: item for item in workspace["agent"]["files"]}
+            self.assertIn("references/web-test.md", files)
+            self.assertEqual(workspace["sessions"][0]["id"], session.id)
+            read = web.get("/api/agent/file", params={"path": "references/web-test.md"}).json()
+            written = web.put("/api/agent/file", json={
+                "path": "references/web-test.md", "revision": read["revision"],
+                "text": "更新参考。\n"})
+            self.assertEqual(written.status_code, 200, written.text)
+            self.assertEqual(ref.read_text(), "更新参考。\n")
+            history = web.get("/api/sessions/" + session.id).json()
+            self.assertEqual(history["history"][-1]["content"], "历史回答")
+            self.assertIn("history", history)
+
     def test_web_chat_runs_a_task_and_returns_status(self):
         class Provider:
             async def agentloop(self, task, environment, messages, prompt, max_turns, checkpoint, **kwargs):

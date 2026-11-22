@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from urllib.parse import parse_qs, urlsplit
 
+from ...core.session import SessionStore
 from ...core.store import RevisionConflict, Store, file_version, skill_revision, skill_text
 from .chat import ChatSessions
 from ..bridges.registry import discover as discover_bridges
@@ -61,13 +62,17 @@ def overview(store: Store) -> dict:
             "model": {"name": model.get("model"), "base_url": model.get("base_url"),
                       "max_tokens": model.get("max_tokens"), "configured": bool(model),
                       "executor": "native" if "command" in model else "messages"},
-            "agent": {"text": text, "revision": skill_revision(text), "local": store.agent_file.is_file()},
-            "logs": log_page(store)}
+            "agent": {"path": str(store.agent_file), "text": text,
+                      "revision": skill_revision(text), "local": store.agent_file.is_file(),
+                      "files": store.agent_files()},
+            "logs": log_page(store),
+            "sessions": SessionStore(store).list()[:50]}
 
 
 ASSETS = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"),
           "/app.js": ("app.js", "text/javascript")}
 ENTRY_PATH = re.compile(r"/api/memory/([0-9a-f]{32})")
+SESSION_PATH = re.compile(r"/api/sessions/([0-9a-f]{32})\Z")
 CHANNEL_PATH = re.compile(r"/api/channels/([A-Za-z0-9_-]{1,64})/(messages|status)\Z")
 
 
@@ -151,7 +156,16 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
                 # When idle, a tab only checks file metadata. The tag is captured
                 # before reading so a concurrent write is picked up by the next poll.
                 agent = file_version(store.agent_file) or skill_revision(skill_text(store.home))
-                versions = (agent, file_version(store.path), file_version(store.local("events.jsonl")),
+                bundle = hashlib.sha256(repr(
+                    [(item["path"], item["sha256"]) for item in store.agent_files()]).encode()).hexdigest()
+                sessions = hashlib.sha256(repr(
+                    [(item["id"], item["updated"], item["turns"])
+                     for item in SessionStore(store).list()]).encode()).hexdigest()
+                bridges = hashlib.sha256(repr(
+                    [(item["id"], item["path"], item["enabled"])
+                     for item in discover_bridges(store)]).encode()).hexdigest()
+                versions = (agent, bundle, sessions, bridges, file_version(store.path),
+                            file_version(store.local("events.jsonl")),
                             file_version(store.config_path), store.memory.fingerprint())
                 tag = '"' + hashlib.sha256(repr(versions).encode()).hexdigest() + '"'
                 if self.headers.get("If-None-Match") == tag:
@@ -174,6 +188,18 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
             if path == "/api/chat/reset" and self.command == "POST":
                 data = self.body()
                 return self.reply(200, chat.reset(data.get("session")))
+            if read and path == "/api/sessions":
+                return self.reply(200, {"sessions": SessionStore(store).list()})
+            if read and SESSION_PATH.fullmatch(path):
+                ident = SESSION_PATH.fullmatch(path)[1]
+                try:
+                    session = SessionStore(store).open(ident)
+                    session.load()
+                except (OSError, ValueError) as exc:
+                    return self.reply(404, {"error": str(exc)})
+                return self.reply(200, session.info() | {
+                    "history": session.history()[-100:],
+                    "summary": session.summary()})
             if path == "/api/logs":
                 if not read:
                     return self.reply(405, {"error": "运行日志只读"})
@@ -186,6 +212,15 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
                 except ValueError:
                     return self.reply(404, {"error": "本项目没有该条目"})
                 return self.reply(200, {k: item[k] for k in ("id", "kind", "title", "text", "revision")})
+            if read and path == "/api/agent/file":
+                relative = parse_qs(target.query).get("path", [""])[0]
+                return self.reply(200, store.read_agent_file(relative))
+            if path == "/api/agent/file" and self.command == "PUT":
+                data = self.body()
+                if not all(isinstance(data.get(k), str) for k in ("path", "text", "revision")):
+                    raise ValueError("agent 文件需要 path、text 和 revision")
+                return self.reply(200, store.write_agent_file(
+                    data["path"], data["text"], data["revision"]))
             if path == "/api/agent" and self.command in {"PUT", "DELETE"}:
                 data = self.body()
                 revision = data.get("revision")

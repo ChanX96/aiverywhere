@@ -200,3 +200,41 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(target.resolve(), (self.home / "data/SKILL.md").resolve())
         again = self.cli("link")
         self.assertFalse(json.loads(again.stdout)["created"])
+
+
+class AgentBundleTest(unittest.TestCase):
+    def test_bundle_files_are_listed_and_edited_with_revision_checks(self):
+        import tempfile
+        from pathlib import Path
+        from aiverywhere.core.store import Store
+
+        with tempfile.TemporaryDirectory() as root:
+            project = Path(root) / "project"
+            project.mkdir()
+            store = Store(Path(root) / "instance", project)
+            store.initialize()
+            ref_dir = store.skill_dir / "references"
+            ref_dir.mkdir(exist_ok=True)
+            (ref_dir / "test.md").write_text("原始。\n")
+            paths = {item["path"] for item in store.agent_files()}
+            self.assertIn("SKILL.md", paths)
+            self.assertIn("references/test.md", paths)
+            item = store.read_agent_file("references/test.md")
+            updated = store.write_agent_file(
+                "references/test.md", item["text"] + "补充。\n", item["revision"])
+            self.assertTrue(store.read_agent_file("references/test.md")["text"].endswith("补充。\n"))
+            with self.assertRaises(ValueError):
+                store.write_agent_file("references/test.md", "stale", item["revision"])
+            with self.assertRaises(ValueError):
+                store.read_agent_file("../config.json")
+            with self.assertRaises(ValueError):
+                store.read_agent_file("references/../SKILL.md")
+            self.assertTrue(updated["revision"])
+
+
+class ResumeOptionTest(unittest.TestCase):
+    def test_chat_accepts_a_durable_session_id(self):
+        from aiverywhere.cli.main import parser
+        ident = "a" * 32
+        args = parser().parse_args(["chat", "--resume", ident])
+        self.assertEqual(args.resume, ident)

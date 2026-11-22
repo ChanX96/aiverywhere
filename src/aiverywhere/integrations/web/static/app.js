@@ -2,12 +2,13 @@
 
 const $ = (selector) => document.querySelector(selector);
 const token = $('meta[name="session"]').content;
-const titles = {chat: "对话与工作", overview: "实例概览", memory: "记忆与技能", agent: "Agent 定义", logs: "运行日志"};
+const titles = {chat: "对话与工作", overview: "实例概览", memory: "记忆与技能", agent: "Agent 定义", sessions: "会话与任务", logs: "运行日志"};
 const labels = {completed: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断", running: "运行中"};
 const kindName = (kind) => kind === "skill" ? "技能" : kind === "clue" ? "线索" : "记忆";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const date = (seconds) => seconds ? new Date(seconds * 1000).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}) : "—";
 let workspace, page, editing, agentDraft;
+let agentSelected = "SKILL.md";
 let logRows = [], logBefore = null;
 let filter = "all", query = "", toastTimer;
 let workspaceTag, refreshNumber = 0;
@@ -65,7 +66,7 @@ function activity() {
   });
   const peak = Math.max(1, ...days.map(day => day.count));
   const bars = days.map(day => `<div class="day" title="${day.label} · ${day.count} 次"><span class="level-${Math.ceil(day.count / peak * 10)}"></span></div>`).join("");
-  return `<section class="panel"><div class="panel-head"><h2>运行活动</h2><small>近 7 日</small></div>
+  return `<section class="panel"><div class="panel-head"><h2>运行活动</h2><a class="text-button" href="#logs">运行记录</a></div>
     <div class="chart-wrap"><div class="chart" role="img" aria-label="${days.map(d => d.label + '：' + d.count + ' 次').join('，')}">${bars}</div>
     <div class="axis">${days.map(d => `<span>${d.label}</span>`).join("")}</div></div>
     <div class="activity-note">${logs.length ? "最近一次运行 · " + date(logs[0].time) : "本项目还没有运行记录"}</div>
@@ -89,9 +90,9 @@ function bridgesPanel() {
 
 function overview() {
   const facts = workspace.memory.filter(i => i.kind === "fact").length;
-  const stats = [["layers","项目记忆",facts],["spark","已学技能",workspace.memory.length - facts],
-    ["terminal","近期运行",String(workspace.logs.rows.length) + (workspace.logs.before ? "+" : "")]];
-  return `<div class="stats">${stats.map(([icon,label,value]) => `<div class="stat"><div class="stat-label"><i class="ico ${icon}"></i>${label}</div><strong class="stat-number">${value}</strong></div>`).join("")}</div>
+  const stats = [["layers","项目记忆",facts,"#memory"],["spark","已学技能",workspace.memory.length - facts,"#memory"],
+    ["terminal","近期运行",String(workspace.logs.rows.length) + (workspace.logs.before ? "+" : ""),"#logs"]];
+  return `<div class="stats">${stats.map(([icon,label,value,href]) => `<a class="stat" href="${href}"><div class="stat-label"><i class="ico ${icon}"></i>${label}</div><strong class="stat-number">${value}</strong></a>`).join("")}</div>
     <div class="split">${agentPreview()}${activity()}</div>${bridgesPanel()}<section class="panel">
     <div class="panel-head"><h2>最近更新</h2><a class="text-button" href="#memory">全部条目</a></div>${memoryTable(workspace.memory.slice(0,5))}</section>`;
 }
@@ -110,15 +111,24 @@ function memoryView() {
 
 function agentView() {
   const agent = workspace.agent;
-  return `<section class="panel"><div class="filebar"><span class="filename">data/SKILL.md</span><span class="badge">${agent.local ? "本地版本" : "默认模板"}</span></div>
-    <textarea spellcheck="false" id="agent-text" class="agent-editor" aria-label="Agent 定义正文">${esc(agentDraft?.text ?? agent.text)}</textarea>
-    <div class="agent-actions"><button class="danger" data-action="delete-agent" ${agent.local ? "" : "disabled"}>删除本地版本</button>
+  const files = agent.files || [{path:"SKILL.md"}];
+  const selected = agentDraft?.path || agentSelected;
+  const current = files.find(item => item.path === selected) || files[0];
+  const text = agentDraft?.text ?? (selected === "SKILL.md" ? agent.text : "");
+  const local = selected === "SKILL.md" ? agent.local : true;
+  const list = files.map(item => `<button class="agent-file ${item.path === selected ? "active" : ""}" data-action="agent-file" data-path="${esc(item.path)}">
+    <span>${esc(item.path)}</span><small>${Math.ceil(item.size / 1024)} KiB</small></button>`).join("");
+  return `<section class="panel agent-panel"><div class="agent-layout">
+    <aside class="agent-files" aria-label="Agent bundle 文件"><div class="agent-files-head">Bundle 文件</div>${list}</aside>
+    <div class="agent-main"><div class="filebar"><span class="filename">${esc(current?.path || "SKILL.md")}</span><span class="badge">${local ? "本地版本" : "默认模板"}</span></div>
+    <textarea spellcheck="false" id="agent-text" class="agent-editor" aria-label="Agent 文件正文">${esc(text)}</textarea>
+    <div class="agent-actions"><button class="danger" data-action="delete-agent" ${selected === "SKILL.md" && agent.local ? "" : "disabled"}>删除本地版本</button>
     <button class="secondary" data-action="discard" ${agentDraft ? "" : "disabled"}>撤销编辑</button>
-    <button class="primary" data-action="save-agent">${agent.local ? "保存修订" : "保存为本地版本"}</button></div></section>`;
+    <button class="primary" data-action="save-agent">${local ? "保存修订" : "保存为本地版本"}</button></div></div></section>`;
 }
 
 function logsView() {
-  const items = logRows.map(i => `<tr><td class="meta">${date(i.time)}</td><td class="meta task-id" title="${esc(i.task_id)}">${esc(i.task_id)}</td>
+  const items = logRows.map((i, index) => `<tr><td class="meta">${date(i.time)}</td><td class="meta task-id"><button class="link mono" data-action="log-detail" data-index="${index}" title="${esc(i.task_id)}">${esc(i.task_id)}</button></td>
     <td><span class="status ${Object.hasOwn(labels,i.status) ? i.status : ""}">${esc(labels[i.status] || i.status)}</span></td><td class="meta">${esc(i.tool_calls)}</td></tr>`).join("");
   const table = `<div class="table-wrap"><table><thead><tr><th>时间</th><th>任务 ID</th><th>状态</th><th>工具调用</th></tr></thead><tbody>${items}</tbody></table></div>`;
   return `<section class="panel"><div class="filebar"><span class="filename">data/events.jsonl</span><span class="badge">只读</span></div>
@@ -126,6 +136,24 @@ function logsView() {
     <div class="panel-foot"><span>已显示 ${logRows.length} 条</span>${logBefore ? '<button class="text-button" data-action="more">加载更早记录</button>' : ""}</div></section>`;
 }
 
+
+function projectPanel() {
+  return `<section class="panel"><div class="panel-head"><h2>项目空间</h2><span class="badge">当前实例</span></div>
+    <div class="project-card"><code>${esc(workspace.project)}</code><p>这个 Web 绑定当前项目实例。切换项目时，在目标项目目录启动另一个 supervisor：</p>
+    <pre class="command">cd /目标项目
+aiverywhere</pre><p class="fine">项目本地实例位于目标项目的 <code>.aiverywhere/</code>；不要在一个 Web 中任意切换到未登记路径。</p></div></section>`;
+}
+
+function sessionsView() {
+  const rows = (workspace.sessions || []).map(item => `<tr><td class="meta mono">${esc(item.id)}</td><td>${item.turns}</td>
+    <td>${item.summary ? "已压实" : "原始"}</td><td class="meta">${date(item.updated)}</td>
+    <td><button class="link" data-action="session-detail" data-id="${esc(item.id)}">查看</button></td></tr>`).join("");
+  return `<section class="panel"><div class="panel-head"><h2>会话与任务</h2><small>${(workspace.sessions || []).length} 个 CLI session</small></div>
+    <div class="session-explain"><strong>Session 是持久对话，Task 是一次执行。</strong>
+      <p>CLI 每轮任务写入 session；Web 对话是当前 supervisor 进程内的临时会话，刷新或重启后不保证恢复。要长期保留和继续，请使用 CLI session。</p></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Session</th><th>回合</th><th>上下文</th><th>更新</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : empty("spark","还没有 CLI session","运行 aiverywhere chat 并完成一轮对话后，session 会持久化到 data/sessions/。")}
+    <div class="panel-foot"><span>恢复：<code>aiverywhere chat --resume &lt;id&gt;</code></span></div></section>${projectPanel()}`;
+}
 
 const newSessionId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
   ? crypto.randomUUID()
@@ -418,7 +446,7 @@ function render() {
     link.classList.toggle("active", current);
     if (current) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
   });
-  $("#view").innerHTML = {chat:chatView, overview, memory:memoryView, agent:agentView, logs:logsView}[page]();
+  $("#view").innerHTML = {chat:chatView, overview, memory:memoryView, agent:agentView, sessions:sessionsView, logs:logsView}[page]();
   $("#view").setAttribute("aria-busy", "false");
   if (page === "chat") paintChat();
   if (page === "memory") filterMemory();
@@ -504,23 +532,58 @@ async function action(name, button) {
       }
       break;
     }
-    case "discard":
-      agentDraft = null;
+    case "agent-file": {
+      const path = button.dataset.path;
+      const content = await api("/api/agent/file?path=" + encodeURIComponent(path));
+      agentSelected = path;
+      agentDraft = {path, text:content.text, revision:content.revision};
       render();
       break;
-    case "save-agent":
-      await api("/api/agent", "PUT", {revision:agentDraft?.revision ?? workspace.agent.revision, text:$("#agent-text").value});
+    }
+    case "discard":
       agentDraft = null;
-      await reload();
-      toast("Agent 定义已保存");
+      agentSelected = "SKILL.md";
+      render();
       break;
+    case "save-agent": {
+      const path = agentDraft?.path || agentSelected;
+      const revision = agentDraft?.revision || (path === "SKILL.md" ? workspace.agent.revision :
+        (workspace.agent.files || []).find(item => item.path === path)?.revision);
+      await api("/api/agent/file", "PUT", {path, revision, text:$("#agent-text").value});
+      agentDraft = null;
+      agentSelected = "SKILL.md";
+      await reload();
+      toast("Agent 文件已保存");
+      break;
+    }
     case "delete-agent":
-      if (!await confirmDelete("删除活动的 data/SKILL.md？新任务将使用项目模板。")) return;
+      if (agentSelected !== "SKILL.md" || !await confirmDelete("删除活动的 SKILL.md？新任务将使用项目模板。")) return;
       await api("/api/agent", "DELETE", {revision:workspace.agent.revision});
       agentDraft = null;
+      agentSelected = "SKILL.md";
       await reload();
       toast("本地版本已删除");
       break;
+    case "log-detail": {
+      const row = logRows[Number(button.dataset.index)];
+      if (!row) return;
+      $("#detail-title").textContent = "运行记录";
+      $("#detail-body").textContent = JSON.stringify(row, null, 2);
+      $("#detail").showModal();
+      break;
+    }
+    case "session-detail": {
+      const data = await api("/api/sessions/" + button.dataset.id);
+      $("#detail-title").textContent = "Session " + data.id.slice(0, 12);
+      const transcript = (data.history || []).map(message => {
+        const role = message.role || "message";
+        const content = typeof message.content === "string" ? message.content : JSON.stringify(message.content);
+        return `[${role}]\n${content}`;
+      }).join("\n\n");
+      $("#detail-body").textContent = `恢复命令：\naiverywhere chat --resume ${data.id}\n\n${transcript || "（暂无对话记录）"}`;
+      $("#detail").showModal();
+      break;
+    }
     case "more": {
       button.disabled = true;
       try {
@@ -539,7 +602,7 @@ $("#create").onclick = () => { if (workspace) openEditor(); };
 $("#refresh").onclick = () => reload().catch(e => toast(e.message, true));
 $("#confirm-no").onclick = () => $("#confirm").close();
 $("#confirm-yes").onclick = () => $("#confirm").close("delete");
-document.querySelectorAll("#editor .close").forEach(button => button.onclick = () => $("#editor").close());
+document.querySelectorAll("#editor .close, #detail .close").forEach(button => button.onclick = () => button.closest("dialog").close());
 $("#entry-form").onsubmit = async event => {
   event.preventDefault();
   const button = event.submitter;
@@ -566,7 +629,10 @@ $("#delete-entry").onclick = async () => {
 $("#view").addEventListener("input", event => {
   if (event.target.id === "search") { query = event.target.value; filterMemory(); }
   if (event.target.id === "agent-text") {
-    agentDraft = {text:event.target.value, revision:agentDraft?.revision ?? workspace.agent.revision};
+    const path = agentDraft?.path || agentSelected;
+    const revision = agentDraft?.revision || (path === "SKILL.md" ? workspace.agent.revision :
+      (workspace.agent.files || []).find(item => item.path === path)?.revision);
+    agentDraft = {path, text:event.target.value, revision};
     $('[data-action="discard"]').disabled = false;
   }
   if (event.target.id === "chat-input") { setChatSend(); autoGrow(event.target); }

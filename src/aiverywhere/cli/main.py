@@ -101,6 +101,7 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--task-id", help="宿主分配的请求 ID，同一项目的重复请求返回已有回执")
     chat = sub.add_parser("chat", help="交互式 CLI，一次推进一个前台任务，可 /cancel")
     chat.add_argument("--new", dest="new_session", action="store_true", default=argparse.SUPPRESS, help="开始新的 CLI session")
+    chat.add_argument("--resume", metavar="ID", default=None, help="恢复指定 CLI session 后进入交互")
     chat.add_argument("--ask-permissions", dest="ask_permissions", action="store_true",
                       default=argparse.SUPPRESS, help="对写文件和命令逐次询问")
     chat.add_argument("--no-network", dest="no_network", action="store_true",
@@ -534,7 +535,10 @@ async def chat(args, store: Store, provider) -> int:
     except (NotImplementedError, RuntimeError):
         pass
     try:
-        open_session(new=bool(getattr(args, "new_session", False)))
+        if getattr(args, "resume", None):
+            open_session(ident=args.resume)
+        else:
+            open_session(new=bool(getattr(args, "new_session", False)))
         while not quitting:
             if prompt_ui is not None:
                 try:
@@ -836,8 +840,8 @@ def welcome_chat(store: Store, new_session: bool = False, allow_write: bool = Fa
     args = argparse.Namespace(command="chat", json=False, allow_write=allow_write,
                               max_turns=defaults["max_turns"], timeout=defaults["timeout"],
                               host=None, mcp=[], agent_edit=None, model=None, allow_exec=allow_exec,
-                              new_session=new_session, ask_permissions=ask_permissions,
-                              no_network=no_network)
+                              new_session=new_session, resume=None,
+                              ask_permissions=ask_permissions, no_network=no_network)
 
     async def run():
         async with httpx.AsyncClient(timeout=60) as client:

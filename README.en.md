@@ -191,7 +191,15 @@ The host uses its own model, tools, and permissions.
 
 ### Resident supervisor and Web
 
-The interactive CLI ensures a **single resident supervisor** is running and opens the local Web console:
+The interactive CLI ensures a **single resident supervisor** is running and opens the local Web console. Resume a durable session directly with:
+
+```sh
+aiverywhere chat --resume <session-id>
+```
+
+A session is a durable conversation; a task is one execution. The Web "Sessions & tasks" page lists CLI sessions and resume commands, while Web chat context is local to the supervisor process.
+
+
 
 ```sh
 aiverywhere

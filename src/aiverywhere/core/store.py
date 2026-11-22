@@ -338,6 +338,79 @@ class Store:
             rest = json.dumps(body, ensure_ascii=False, separators=(",", ":"))[1:]
             atomic_write(self.path, (first + ",\n" + rest).encode())
 
+    def agent_files(self) -> list[dict]:
+        """List editable files in the live skill bundle (SKILL.md + references/scripts)."""
+        self.load_agent()
+        root = self.skill_dir
+        files = []
+        candidates = [root / "SKILL.md"]
+        for folder in ("references", "scripts"):
+            base = root / folder
+            if base.is_dir() and not base.is_symlink():
+                candidates.extend(sorted(path for path in base.iterdir()
+                                         if path.is_file() and not path.is_symlink()))
+        for path in candidates:
+            if not path.is_file() or path.is_symlink():
+                continue
+            try:
+                raw = path.read_bytes()
+                relative = str(path.relative_to(root))
+            except OSError:
+                continue
+            files.append({"path": relative, "size": len(raw),
+                          "sha256": hashlib.sha256(raw).hexdigest(),
+                          "revision": (skill_revision(raw.decode("utf-8", "replace"))
+                                       if relative == "SKILL.md" else hashlib.sha256(raw).hexdigest())})
+        return files
+
+    def _agent_path(self, relative: str) -> Path:
+        if (not isinstance(relative, str) or relative.startswith("/") or "\\" in relative
+                or any(part in {"", ".", ".."} for part in relative.split("/"))):
+            raise ValueError("agent 文件路径无效")
+        root = self.skill_dir.resolve()
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root) or path == root or path.is_symlink():
+            raise ValueError("agent 文件路径超出 bundle")
+        if relative != "SKILL.md" and not (
+                relative.startswith("references/") and path.suffix in {".md", ".json"}
+                or relative.startswith("scripts/") and path.suffix == ".sh"):
+            raise ValueError("只允许编辑 SKILL.md、references/*.md/json 和 scripts/*.sh")
+        return path
+
+    def read_agent_file(self, relative: str) -> dict:
+        path = self._agent_path(relative)
+        if relative == "SKILL.md":
+            text = self.load_agent()
+            return {"path": relative, "text": text, "revision": skill_revision(text)}
+        if not path.is_file():
+            raise ValueError("agent 文件不存在")
+        raw = path.read_bytes()
+        if len(raw) > 131072 or b"\0" in raw:
+            raise ValueError("agent 文件需要是 128 KiB 以内的 UTF-8 文本")
+        text = raw.decode("utf-8")
+        return {"path": relative, "text": text, "revision": hashlib.sha256(raw).hexdigest()}
+
+    def write_agent_file(self, relative: str, text: str, expected: str) -> dict:
+        if not isinstance(text, str) or len(text.encode()) > 131072:
+            raise ValueError("agent 文件需要是 128 KiB 以内的 UTF-8 文本")
+        if relative == "SKILL.md":
+            return self.revise_agent(expected, text)
+        path = self._agent_path(relative)
+        with self.locked():
+            if expected == "new":
+                if path.exists():
+                    raise ValueError("agent 文件已存在")
+                mode = 0o755 if relative.startswith("scripts/") else 0o644
+                path.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                if not path.is_file():
+                    raise ValueError("agent 文件不存在")
+                if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                    raise ValueError("agent 文件已变化，请重新读取")
+                mode = path.stat().st_mode & 0o777
+            atomic_write(path, text.encode(), create=expected == "new", mode=mode)
+        return {"path": relative, "revision": hashlib.sha256(text.encode()).hexdigest()}
+
     def load_agent(self, *, require_path: bool = False) -> str:
         """A writable instance gives the CLI and a native host the same live file."""
         if not self.agent_file.is_file():

@@ -241,7 +241,15 @@ aiverywhere skill --info
 
 ### 常驻进程与 Web
 
-交互式 CLI 默认会确保一个**单实例常驻 supervisor**运行，并打开本地 Web：
+交互式 CLI 默认会确保一个**单实例常驻 supervisor**运行，并打开本地 Web。历史 session 可直接恢复：
+
+```sh
+aiverywhere chat --resume <session-id>
+```
+
+会话是持久对话，任务是一次执行；Web 的“会话与任务”页列出 CLI session 和恢复命令，Web 对话本身是当前 supervisor 进程内的临时上下文。
+
+
 
 ```sh
 aiverywhere
@@ -349,7 +357,7 @@ aiverywhere web
 aiverywhere web --no-open
 ```
 
-Web 可以对话、管理记忆和 skill、查看日志，并按需分别授权写文件、执行命令和联网。Web 和常驻 worker 由 supervisor 托管；CLI 退出后仍继续运行，直到 `aiverywhere stop`。
+Web 可以对话、管理记忆和 skill、编辑完整 Agent bundle、查看历史 CLI session 与运行日志，并按需分别授权写文件、执行命令和联网。一个 Web 绑定一个项目实例；切换项目需在目标项目目录启动 `aiverywhere`。Web 和常驻 worker 由 supervisor 托管；CLI 退出后仍继续运行，直到 `aiverywhere stop`。
 
 ## 记忆
 

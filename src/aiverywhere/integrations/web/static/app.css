@@ -1159,3 +1159,33 @@ textarea { resize: vertical; }
   color: #a8ecd7;
   font: .82em var(--mono);
 }
+
+/* Agent bundle: file rail + one editor. */
+.agent-panel { overflow: hidden; }
+.agent-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: 520px; }
+.agent-files { border-right: 1px solid var(--line); background: #0e1821; padding: 12px; overflow: auto; }
+.agent-files-head { color: var(--muted); font: .72rem var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 4px 8px 10px; }
+.agent-file { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: #b8c8ce; text-align: left; cursor: pointer; }
+.agent-file:hover { background: #182833; color: var(--ink); }
+.agent-file.active { background: #203642; color: #e6f5f2; }
+.agent-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-file small { color: var(--muted); font: .7rem var(--mono); flex: none; }
+.agent-main { min-width: 0; display: flex; flex-direction: column; }
+.agent-main .agent-editor { border: 0; border-radius: 0; flex: 1; min-height: 440px; }
+@media (max-width: 760px) {
+  .agent-layout { grid-template-columns: 1fr; }
+  .agent-files { border-right: 0; border-bottom: 1px solid var(--line); max-height: 160px; }
+  .agent-main .agent-editor { min-height: 360px; }
+}
+
+/* Project, session and run-detail surfaces. */
+a.stat { color: inherit; text-decoration: none; }
+a.stat:hover { border-color: #4d6b78; }
+.session-explain { padding: 16px 20px; border-bottom: 1px solid var(--line); background: #101b24; }
+.session-explain p { color: var(--muted); margin: 5px 0 0; line-height: 1.65; }
+.project-card { padding: 16px 20px; }
+.project-card code { color: #b9e5d8; }
+.project-card p { color: var(--muted); margin: 9px 0; line-height: 1.65; }
+.project-card .fine { font-size: .8rem; }
+.command { margin: 10px 0; padding: 10px 12px; background: #0b141c; border: 1px solid var(--line); border-radius: 6px; color: #d5e4e7; font: .82rem/1.6 var(--mono); white-space: pre-wrap; }
+.detail-body { margin: 14px 0 0; padding: 13px; max-height: 58vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #0b141c; border: 1px solid var(--line); border-radius: 6px; color: #cfe0e4; font: .8rem/1.55 var(--mono); }

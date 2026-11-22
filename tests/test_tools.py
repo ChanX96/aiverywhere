@@ -46,6 +46,20 @@ class ToolsTest(unittest.TestCase):
         self.assertNotIn("edit_file", limited.available)
         self.assertNotIn("run_command", limited.available)
 
+    def test_execute_dispatches_web_and_command_tools(self):
+        rss = b"""<rss><channel><item>
+            <title>Python</title><link>https://python.org</link>
+            <description>Python documentation</description>
+        </item></channel></rss>"""
+        response = httpx.Response(200, content=rss,
+                                  headers={"content-type": "application/rss+xml"},
+                                  request=httpx.Request("GET", "https://www.bing.com/search"))
+        with patch("httpx.get", return_value=response):
+            result = self.tools.execute("web_search", {"query": "python"})
+        self.assertEqual(result["results"][0]["url"], "https://python.org")
+        command = self.tools.execute("run_command", {"argv": [sys.executable, "-c", "print('ok')"]})
+        self.assertEqual(command["stdout"].strip(), "ok")
+
     def test_search_web_and_reject_private_fetch(self):
         rss = b"""<rss><channel><item>
             <title>Python</title><link>https://python.org</link>

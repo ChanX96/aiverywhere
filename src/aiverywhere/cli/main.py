@@ -272,6 +272,20 @@ def _slash_matches(text: str) -> list[tuple[str, str]]:
             if command.startswith(text)]
 
 
+_ACTIVE_PROMPT = None
+
+
+def _refresh_terminal_prompt() -> None:
+    """A task's output can overwrite the prompt-toolkit line; redraw it."""
+    prompt = _ACTIVE_PROMPT
+    if prompt is None:
+        return
+    try:
+        prompt.app.invalidate()
+    except (AttributeError, RuntimeError):
+        pass
+
+
 def _start_terminal_reader(loop, queue) -> threading.Thread | None:
     """Use a prompt-toolkit completion menu when a real TTY is available."""
     try:
@@ -289,9 +303,11 @@ def _start_terminal_reader(loop, queue) -> threading.Thread | None:
                                  display=command, display_meta=description)
 
     def worker():
+        global _ACTIVE_PROMPT
         session = PromptSession(completer=SlashCompleter(),
                                 complete_while_typing=True,
                                 style=Style.from_dict({"prompt": "bold #22d3ee"}))
+        _ACTIVE_PROMPT = session
         while True:
             try:
                 line = session.prompt("aiverywhere › ")
@@ -327,6 +343,7 @@ async def chat(args, store: Store, provider) -> int:
 
     def message(text: str):
         emit(event="help", message=text)
+        _refresh_terminal_prompt()
 
     def select_provider():
         return provider() if callable(provider) else provider
@@ -415,6 +432,7 @@ async def chat(args, store: Store, provider) -> int:
         if streamed and not args.json:
             result = result | {"answer": ""}
         emit(event="result", **result)
+        _refresh_terminal_prompt()
 
     async def run_turn(candidate: Task, prompt: str):
         nonlocal current

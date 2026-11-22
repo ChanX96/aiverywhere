@@ -460,8 +460,20 @@ class Tools:
             return self.store.share(values["id"], values["revision"], values["evidence"])
         if name == "used_skill":
             return self.store.used_skill(values["id"], values["revision"], values["evidence"])
-        return {"discover": self.discover, "list_files": self.list_files,
-                "read_file": self.read_file, "write_file": self.write_file}[name](**values)
+        dispatch = {
+            "discover": self.discover,
+            "list_files": self.list_files,
+            "read_file": self.read_file,
+            "write_file": self.write_file,
+            "search_files": self.search_files,
+            "edit_file": self.edit_file,
+            "run_command": self.run_command,
+            "web_search": self.web_search,
+            "web_fetch": self.web_fetch,
+        }
+        if name not in dispatch:
+            raise ValueError(f"工具没有本地执行器：{name}")
+        return dispatch[name](**values)
 
 
 class _DuckDuckGoResults(HTMLParser):

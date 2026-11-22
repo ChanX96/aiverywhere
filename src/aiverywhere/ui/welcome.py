@@ -53,12 +53,12 @@ def _gradient(text: str, row: int) -> str:
     return "".join(parts) + "\033[0m"
 
 
-def _wordmark() -> list[str]:
+def _wordmark(text: str = WORDMARK) -> list[str]:
     rows = []
     for row in range(7):
         line = " ".join(
             "".join("█" if bit == "1" else " " for bit in FONT[letter][row])
-            for letter in WORDMARK)
+            for letter in text)
         rows.append("  " + _gradient(line, row))
     return rows
 
@@ -96,6 +96,9 @@ def render(store: Store) -> str:
     lines = [""]
     if columns >= 72:
         lines += _wordmark()
+        lines.append("")
+    elif columns >= 40:
+        lines += _wordmark("AIVERY") + [""] + _wordmark("WHERE")
         lines.append("")
     else:
         lines.append("  " + _paint("1;36", "AIVERYWHERE") + _paint("2", "   aiverywhere"))
@@ -135,7 +138,7 @@ def render(store: Store) -> str:
         _line("记忆", f"{len(items) - clues} 条事实/技能  ·  {clues} 条线索"),
         _line("访问", "网页可用 · worker 可用；--allow-write 写入 · --allow-exec 命令"),
         rule,
-        "  " + _paint("1;36", "›") + " 输入任务开始"
+        "  " + _paint("1;36", "aiverywhere ›") + " 输入任务开始"
         + _paint("2", "   /help 帮助 · /cancel 取消 · /quit 退出"),
         "  " + _paint("2", "aiverywhere run '...'  ·  aiverywhere web  ·  aiverywhere skill --info"),
         "",

@@ -519,14 +519,18 @@ def main(argv=None) -> int:
         if args.command == "welcome":
             from ..ui.welcome import show
             initialized = show(store)
-            if launched and initialized and sys.stdin.isatty():
+            if launched and initialized:
                 try:
                     configured = bool(store.configuration().get("model"))
                 except (OSError, ValueError):
                     configured = False
-                if configured or os.getenv("AIVERYWHERE_MODEL") or os.getenv("ANTHROPIC_MODEL"):
+                if not sys.stdin.isatty():
+                    print("  提示：当前 stdin 不是终端；交互输入请直接在真实终端运行 aiverywhere，"
+                          "或使用 aiverywhere chat。", flush=True)
+                elif configured or os.getenv("AIVERYWHERE_MODEL") or os.getenv("ANTHROPIC_MODEL"):
                     return welcome_chat(store)
-                print("  提示：尚未配置 CLI 模型，运行 aiverywhere setup 后再对话。", flush=True)
+                else:
+                    print("  aiverywhere › 尚未配置 CLI 模型；运行 aiverywhere setup 后再对话。", flush=True)
             return 0
         if args.command == "init":
             print_json(store.initialize())

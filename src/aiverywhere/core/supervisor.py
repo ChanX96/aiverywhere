@@ -161,7 +161,7 @@ def ensure(store: Store, *, port: int | None = None, open_browser: str = "never"
             start_new_session=True, close_fds=True)
         _SPAWNED.append(child)
         log.close()
-        deadline = time.time() + 15
+        deadline = time.time() + 30
         while time.time() < deadline:
             info = _read_info(store)
             if info is not None and _health(info):
@@ -174,12 +174,18 @@ def ensure(store: Store, *, port: int | None = None, open_browser: str = "never"
             child.terminate()
         except ProcessLookupError:
             pass
+        try:
+            child.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            child.kill()
         tail = ""
         try:
-            tail = paths["log"].read_text(errors="replace")[-1500:]
+            tail = paths["log"].read_text(errors="replace")[-3000:]
         except OSError:
             pass
-        raise RuntimeError("常驻进程启动失败" + (f"：{tail.strip()}" if tail.strip() else ""))
+        detail = f"exit={child.returncode}" if child.returncode is not None else "still running"
+        raise RuntimeError("常驻进程启动失败（" + detail + "）" +
+                           (f"：{tail.strip()}" if tail.strip() else "；日志为空，请检查 daemon 启动"))
 
 
 def stop(store: Store) -> dict:

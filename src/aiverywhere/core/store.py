@@ -37,15 +37,18 @@ def user_home() -> Path:
 
 
 def _linked_home(project: Path) -> Path | None:
-    """A project link points at <home>/data/SKILL.md; use it to find a custom home."""
-    link = project / ".agents/skills/aiverywhere/SKILL.md"
+    """Resolve both the current directory link and the legacy SKILL.md link."""
+    base = project / ".agents/skills/aiverywhere"
+    if base.is_symlink():
+        target = base.resolve()
+        if target.name == "aiverywhere" and (target / "SKILL.md").is_file():
+            home = target.parent.parent
+            if (home / "instance.json").is_file() or (home / "config.json").is_file():
+                return home
+    link = base / "SKILL.md"
     if not link.is_symlink():
         return None
     target = link.resolve()
-    if target.name == "aiverywhere" and (target / "SKILL.md").is_file():
-        for home in (target.parent.parent, target.parent.parent.parent):
-            if (home / "instance.json").is_file() or (home / "config.json").is_file():
-                return home
     home = target.parent.parent
     if target.name == "SKILL.md" and target.parent.name == "data" and (
             (home / "config.json").is_file() or (home / "data/config.json").is_file()):
@@ -279,7 +282,12 @@ class Store:
     def _seed_packaged_skill(self) -> None:
         """Install the complete bundled skill for wheel-only CLI installs."""
         target = self.home / "skills/aiverywhere"
-        if (target / "SKILL.md").is_file() or (self.home / "data/SKILL.md").is_file():
+        legacy = (
+            self.home / "data/SKILL.md",
+            self.home / ".project" / "SKILL.md",
+            self.home / "data/skills/aiverywhere/SKILL.md",
+        )
+        if (target / "SKILL.md").is_file() or any(path.is_file() for path in legacy):
             return
         try:
             source = files("aiverywhere").joinpath("skill")
@@ -492,7 +500,9 @@ class Store:
                 target = base.resolve()
                 if target == self.skill_dir.resolve():
                     return {"path": str(base), "target": str(self.skill_dir), "created": False}
-                if target.name == "SKILL.md" and target.parent.name == "data":
+                if not target.exists():
+                    base.unlink()
+                elif target.name == "SKILL.md" and target.parent.name == "data":
                     base.unlink()
                     os.symlink(self.skill_dir, base)
                     return {"path": str(base), "target": str(self.skill_dir), "created": True}

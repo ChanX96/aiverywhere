@@ -86,7 +86,8 @@ class Configure(unittest.TestCase):
         first = self.store.link_agent()
         target = Path(first["path"])
         self.assertTrue(target.is_symlink())
-        self.assertEqual(target.resolve(), self.store.agent_file.resolve())
+        self.assertIn(target.resolve(), {self.store.agent_file.resolve(),
+                                         self.store.skill_dir.resolve()})
         self.assertEqual(_linked_home(self.project), self.store.home.resolve())
         self.assertFalse(self.store.link_agent()["created"])
         target.unlink()

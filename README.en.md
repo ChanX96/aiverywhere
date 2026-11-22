@@ -61,7 +61,7 @@ Shell records are immediately visible to the CLI, and CLI records are readable f
 
 - File discovery, search, edits, and permission-gated commands.
 - Depth-one parallel workers with private workspaces and artifact hand-off.
-- SSE text streaming, CLI streaming, Ctrl+C, and `/cancel`.
+- SSE text streaming, CLI streaming, Ctrl+C; TTY turns return to the prompt, while piped input can still use `/cancel`.
 - Optional local Web console, WeChat gateway, MCP, and schedulers.
 - Read-only by default; writes and command execution require explicit grants.
 
@@ -198,7 +198,7 @@ Type `/` to open the command menu:
 | `/revoke write\|exec\|network` | Revoke a capability for this session |
 | `/approve` / `/deny` | Allow or deny a pending tool operation |
 | `/jobs` | Show tasks in this process |
-| `/cancel` | Cancel the current task |
+| `/cancel` | Cancel the current task (Ctrl+C while a TTY turn runs) |
 | `/ask <id> <question>` | Ask a follow-up against a completed task |
 | `/quit` | Exit |
 

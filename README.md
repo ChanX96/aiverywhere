@@ -86,7 +86,7 @@ Dream、计划、任务回执和 worker 都围绕这套约定工作。
 
 - 文件读取、搜索、局部编辑和受控命令执行；
 - 深度 1 的并行 worker、私有工作区和 artifact 交接；
-- SSE 流式正文、CLI 流式输出、Ctrl+C 和 `/cancel`；
+- SSE 流式正文、CLI 流式输出、Ctrl+C；TTY 任务结束回到提示符，管道输入仍可 `/cancel`；
 - 本地 Web 工作台、微信网关、MCP 和定时任务等可选适配器；
 - 默认只读，写入和命令执行需要显式授权。
 
@@ -248,7 +248,7 @@ aiverywhere ›
 | `/revoke write\|exec\|network` | 撤销本 session 能力 |
 | `/approve` / `/deny` | 允许或拒绝待确认的工具操作 |
 | `/jobs` | 查看当前进程内的任务 |
-| `/cancel` | 取消当前任务 |
+| `/cancel` | 取消当前任务（TTY 任务运行中按 Ctrl+C） |
 | `/ask <id> <问题>` | 向已完成任务追加问题 |
 | `/quit` | 退出交互 |
 

@@ -11,7 +11,6 @@ import json
 import os
 import stat
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -272,22 +271,8 @@ def _slash_matches(text: str) -> list[tuple[str, str]]:
             if command.startswith(text)]
 
 
-_ACTIVE_PROMPT = None
-
-
-def _refresh_terminal_prompt() -> None:
-    """A task's output can overwrite the prompt-toolkit line; redraw it."""
-    prompt = _ACTIVE_PROMPT
-    if prompt is None:
-        return
-    try:
-        prompt.app.invalidate()
-    except (AttributeError, RuntimeError):
-        pass
-
-
-def _start_terminal_reader(loop, queue) -> threading.Thread | None:
-    """Use a prompt-toolkit completion menu when a real TTY is available."""
+def _make_prompt_session():
+    """Create a prompt-toolkit session; return None when the dependency is absent."""
     try:
         from prompt_toolkit import PromptSession
         from prompt_toolkit.completion import Completer, Completion
@@ -302,32 +287,8 @@ def _start_terminal_reader(loop, queue) -> threading.Thread | None:
                 yield Completion(command, start_position=-len(text),
                                  display=command, display_meta=description)
 
-    def worker():
-        global _ACTIVE_PROMPT
-        session = PromptSession(completer=SlashCompleter(),
-                                complete_while_typing=True,
-                                style=Style.from_dict({"prompt": "bold #22d3ee"}))
-        _ACTIVE_PROMPT = session
-        while True:
-            try:
-                line = session.prompt("aiverywhere › ")
-            except EOFError:
-                line = "/quit"
-            except KeyboardInterrupt:
-                line = "/cancel"
-            except Exception:
-                # Never leave the foreground loop waiting on a dead reader.
-                line = "/quit"
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, line)
-            except RuntimeError:
-                return
-            if line == "/quit":
-                return
-
-    thread = threading.Thread(target=worker, name="aiverywhere-prompt", daemon=True)
-    thread.start()
-    return thread
+    return PromptSession(completer=SlashCompleter(), complete_while_typing=True,
+                         style=Style.from_dict({"prompt": "bold #22d3ee"}))
 
 
 async def chat(args, store: Store, provider) -> int:
@@ -343,7 +304,6 @@ async def chat(args, store: Store, provider) -> int:
 
     def message(text: str):
         emit(event="help", message=text)
-        _refresh_terminal_prompt()
 
     def select_provider():
         return provider() if callable(provider) else provider
@@ -357,12 +317,27 @@ async def chat(args, store: Store, provider) -> int:
     if ask["exec"]:
         grants["exec"] = True
     approval_future = None
+    prompt_ui = None
 
     async def request_approval(tool: str, values: dict) -> bool:
         nonlocal approval_future
         capability = "exec" if tool == "run_command" else "write"
         if not ask.get(capability):
             return True
+        if prompt_ui is not None:
+            detail = json.dumps(values, ensure_ascii=False)[:700]
+            try:
+                answer = await prompt_ui.prompt_async(
+                    f"权限请求 [{capability}] {tool}: {detail}\n/approve 允许本次，/deny 拒绝 › ")
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            allowed = answer.strip().lower() in {"/approve", "approve", "y", "yes"}
+            if session is not None:
+                try:
+                    session.append_permission(f"{capability}:{tool}", allowed, "approval")
+                except (OSError, ValueError):
+                    pass
+            return allowed
         if approval_future is not None and not approval_future.done():
             return False
         future = asyncio.get_running_loop().create_future()
@@ -432,7 +407,6 @@ async def chat(args, store: Store, provider) -> int:
         if streamed and not args.json:
             result = result | {"answer": ""}
         emit(event="result", **result)
-        _refresh_terminal_prompt()
 
     async def run_turn(candidate: Task, prompt: str):
         nonlocal current
@@ -520,15 +494,14 @@ async def chat(args, store: Store, provider) -> int:
     queue: asyncio.Queue[str] = asyncio.Queue()
     pending: list[str] = []
     loop = asyncio.get_running_loop()
-    terminal_thread = None
     if sys.stdin.isatty() and not args.json:
-        terminal_thread = _start_terminal_reader(loop, queue)
+        prompt_ui = _make_prompt_session()
 
     async def read_lines():
         async for raw in input_lines():
             await queue.put(raw)
 
-    reader = None if terminal_thread is not None else asyncio.create_task(read_lines())
+    reader = None if prompt_ui is not None else asyncio.create_task(read_lines())
     current: asyncio.Task | None = None
     quitting = False
 
@@ -546,9 +519,16 @@ async def chat(args, store: Store, provider) -> int:
     try:
         open_session(new=bool(getattr(args, "new_session", False)))
         while not quitting:
-            if terminal_thread is None:
+            if prompt_ui is not None:
+                try:
+                    raw = await prompt_ui.prompt_async("aiverywhere › ")
+                except EOFError:
+                    raw = "/quit"
+                except KeyboardInterrupt:
+                    raw = "/cancel"
+            else:
                 prompt()
-            raw = pending.pop(0) if pending else await queue.get()
+                raw = pending.pop(0) if pending else await queue.get()
             line = raw.strip()
             if not line:
                 continue
@@ -668,6 +648,13 @@ async def chat(args, store: Store, provider) -> int:
                 target = task
                 task_handle = asyncio.create_task(run_turn(target, line))
             current = task_handle
+            if prompt_ui is not None:
+                try:
+                    await task_handle
+                except asyncio.CancelledError:
+                    pass
+                current = None
+                continue
             while True:
                 getter = asyncio.create_task(queue.get())
                 done, _ = await asyncio.wait({task_handle, getter},

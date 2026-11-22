@@ -132,7 +132,7 @@ aiverywhere chat
 
 安装器默认使用 `~/.aiverywhere`。在已创建技能链接的项目中，命令会通过链接定位自定义安装根；其他目录用 `--home` 或 `AIVERYWHERE_HOME` 指定。希望某个项目使用独立实例时，执行 `aiverywhere --home <项目> init`，再用同一 `--home` 运行 `link`，避免与用户级实例混用。
 
-每项任务只有一个 agentloop。宿主运行自己的循环，可把目标委派给原生子 agent。独立 CLI 可调已配置的原生命令，只有直接连接 Messages 端点时才运行本项目的最小工具循环。交互模式保留同一个会话历史，每行续接当前会话；运行中输入 `/cancel` 取消当前任务，`/cancel <worker-id>` 只取消指定 worker，`/jobs` 查看状态，`/new` 显式开始新会话，`/ask ID 内容` 向已有会话追问。
+每项任务只有一个 agentloop。宿主运行自己的循环，可把目标委派给原生子 agent。独立 CLI 可调已配置的原生命令，只有直接连接 Messages 端点时才运行本项目的最小工具循环。交互模式保留同一个会话历史，每行续接当前会话；交互式 TTY 在任务结束后回到提示符；任务运行中按 Ctrl+C 取消。`/cancel` 在提示符下报告没有运行任务；非 TTY/管道输入仍可发送 `/cancel`。`/jobs` 查看状态，`/new` 显式开始新会话，`/ask ID 内容` 向已有会话追问。
 
 ```sh
 printf '%s\n' '读 README，返回启动命令和依据。' |
@@ -209,7 +209,7 @@ aiverywhere --no-network
 
 交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/new`、`/jobs`、`/cancel`、`/ask`、`/quit`。
 
-非 JSON 的交互和一次性运行会流式显示正文；`--json` 保持一份最终回执。Ctrl+C 取消当前主任务，`/cancel` 取消当前任务，`/cancel <worker-id>` 只取消指定 worker。已完成产物仍可查；外部操作结果未知时保留待核对状态。
+非 JSON 的交互和一次性运行会流式显示正文；`--json` 保持一份最终回执。Ctrl+C 取消当前主任务；TTY 任务结束后重新显示提示符。非 TTY 输入仍可用 `/cancel`，`/cancel <worker-id>` 取消指定 worker。已完成产物仍可查；外部操作结果未知时保留待核对状态。
 
 ## 记忆、技能和本地工作台
 

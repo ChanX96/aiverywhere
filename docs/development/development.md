@@ -61,7 +61,7 @@ tests/shell/memory.sh          纯 Shell 记忆互读验收
 - 仅宿主路径以 POSIX `sh`、`jq`（可选）和普通 JSON 文件为基线，不需要 Python。可选 CLI 以 Python 3.9+、`venv` 和 `python -m pip` 为基线。模型的 HTTP 客户端及可选 MCP 客户端在 `pyproject.toml` 声明。下载可使用[清华 PyPI 镜像](https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple)。
 - 宿主只安装 skill 时使用项目 `.aiverywhere/`；CLI 通过 `.aiverywhere/instance.json`、项目链接或 `--home` 绑定。记忆写入 `data/memory/<project_key>/`，`state.json` 只保留计划、任务和渠道回执。wheel 包含模板、类型标记和页面资源。密钥和业务数据留在实例目录，打包与 CI 样例仅使用合成数据。
 - 安装和宿主导入只有一条与产品无关的路径：`install.sh` 的仅宿主分支只用 POSIX Shell 复制 bundle、初始化实例并创建 `.agents/skills/aiverywhere` 目录链接；`--cli` 才建 Python 环境并调用 `setup`。旧文件链接可迁移。
-- `config.json` 只包含 `model`、`defaults`、`mcpServers`、`wechat`。模型连接参数和运行预算分别归属两个分区；交互配置必须为除模型名和凭据以外的项提供默认值。凭据不得出现在命令输出或测试日志。
+- `config.json` 包含 `model`、`defaults`、`mcpServers`、`wechat`、`session`、`channels`。模型连接参数和运行预算分别归属两个分区；交互配置必须为除模型名和凭据以外的项提供默认值。凭据不得出现在命令输出或测试日志。
 - 核心注释优先解释协议回执、锁、修订、故障恢复和目录边界的原因。新命令同步更新安装或使用指南；用户可感知的行为变化同步更新设计说明。
 
 ## 选择与改动相称的验收

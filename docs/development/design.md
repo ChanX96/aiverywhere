@@ -59,6 +59,8 @@
 
 **worker。** 主任务可调用 `delegate(tasks)`，首版最多 2 个、深度 1 层。每个 worker 是独立 `Task.run()`，有独立 ID 和对话历史，文件工具根指向 `work/<主任务>/<worker>/` 私有项目副本；真实项目、实例配置和其他 worker 不在其文件路径内。worker 交回摘要、证据和 artifact（ID、路径、大小、SHA-256），主任务核验后调用 `accept_artifact` 写入授权目标。命令只在 Seatbelt/bubblewrap 实际探测通过时开放；否则 worker 保留受限文件工具并报告命令不可用。父任务取消会级联取消 worker，单独的 `/cancel <worker-id>` 不影响兄弟任务。
 
+**迁移与隔离。** 旧 `state.json.memory` 按项目逐条迁移：只有目标文件写入并回读一致，才从旧状态移除该条；其他项目、失败条目和目标冲突都会保留，可安全重跑。共享实例用规范化项目路径派生稳定 `project_key`，Shell 与 Python 同算法；项目本地实例继续使用 `default`。worker 复制项目时按真实实例路径和 worker 目标排除，不再用 `data` 名称做全局排除。Shell 与 Python 使用同一组 memory-v1 有效/无效样本和同一 schema 语义，`shared` 出现时必须为布尔值。
+
 **流式与取消。** Messages 适配器读取 SSE 文本增量；工具参数和回合结束信号完整后才执行工具。非 `--json` 的 `run`/`chat` 流式显示正文，完成时只显示一次；`--json` 保持单份最终回执。Ctrl+C、`/cancel` 和 worker 取消都走同一取消路径，已完成的原子写入保留回执，结果未知的外部操作标为待核对。
 
 ### 一句话安装与运行参数

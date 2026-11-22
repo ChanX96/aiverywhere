@@ -19,7 +19,7 @@ rules='
   (.[0].text | type == "string" and length >= 1 and length <= 8000 and test("\\S")) and
   (.[0].source | type == "string" and length >= 1 and length <= 200) and
   (.[0].updated | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
-  (.[0].shared == null or (.[0].shared | type == "boolean"))
+  ((.[0] | has("shared") | not) or ((.[0].shared | type) == "boolean"))
 '
 if jq -e -s "$rules" >/dev/null 2>&1; then
   printf '%s\n' '{"status":"valid"}'

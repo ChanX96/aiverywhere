@@ -86,21 +86,32 @@ class MemoryRepository:
 
     @property
     def key(self) -> str:
+        """Stable project key shared by Shell and Python.
+
+        A project-local instance keeps the historical `default` directory. A
+        shared instance derives a key from the canonical project path, so two
+        projects never silently write into the same memory directory.
+        """
+        try:
+            if self.home in {self.project, (self.project / ".aiverywhere").resolve()}:
+                return "default"
+        except OSError:
+            pass
         manifest = self.home / "instance.json"
         if manifest.is_file():
             try:
                 value = json.loads(manifest.read_text())
-                if isinstance(value.get("project_key"), str) and value["project_key"]:
+                projects = value.get("projects")
+                if isinstance(projects, dict) and isinstance(projects.get(str(self.project)), str):
+                    mapped = projects[str(self.project)]
+                    if mapped and all(part not in mapped for part in ("/", "\\", "..")):
+                        return mapped
+                if (value.get("project_root") == str(self.project)
+                        and isinstance(value.get("project_key"), str)
+                        and value["project_key"] not in {"", "default"}):
                     return value["project_key"]
             except (OSError, ValueError, AttributeError):
                 pass
-        project_home = self.project / ".aiverywhere"
-        try:
-            local = self.home == project_home.resolve()
-        except OSError:
-            local = False
-        if local or self.home.is_relative_to(self.project):
-            return "default"
         return "p-" + hashlib.sha256(str(self.project).encode()).hexdigest()[:16]
 
     @property
@@ -314,34 +325,76 @@ class MemoryRepository:
                 changed[ident] = current
         return changed
 
+    @staticmethod
+    def _legacy_record(ident: str, item: dict) -> dict:
+        updated = item.get("updated", 0)
+        if isinstance(updated, (int, float)):
+            updated = datetime.fromtimestamp(updated, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return {
+            "schema_version": 1, "id": ident, "revision": int(item.get("revision", 1)),
+            "kind": item.get("kind", "fact"), "title": item.get("title", ""),
+            "text": item.get("text", ""), "source": item.get("source", "migration"),
+            "updated": updated if isinstance(updated, str) else _now(),
+            "shared": bool(item.get("shared")),
+        }
+
+    def _same_project(self, value) -> bool:
+        if not isinstance(value, str):
+            return False
+        if value == str(self.project):
+            return True
+        try:
+            return Path(value).resolve() == self.project
+        except (OSError, ValueError):
+            return False
+
+    @staticmethod
+    def _same_record(left: dict, right: dict) -> bool:
+        return all(left.get(key) == right.get(key) for key in FIELDS)
+
     def migrate(self, state: dict) -> int:
+        """Move this project's legacy records, one verified write at a time.
+
+        Records for other projects and records that cannot be written stay in
+        state.json. Re-running is safe: a target already present with the same
+        ID and content closes the legacy copy without overwriting the target.
+        """
         entries = state.get("memory", {})
         if not isinstance(entries, dict):
             return 0
         migrated = 0
+        remaining = {}
         self._ensure_root()
         for ident, item in entries.items():
-            if not isinstance(item, dict) or item.get("project") != str(self.project):
+            if not isinstance(item, dict) or not self._same_project(item.get("project")):
+                remaining[ident] = item
                 continue
-            target = self._path(ident)
-            if target.exists():
-                continue
-            updated = item.get("updated", 0)
-            if isinstance(updated, (int, float)):
-                updated = datetime.fromtimestamp(updated, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            record = {
-                "schema_version": 1, "id": ident, "revision": int(item.get("revision", 1)),
-                "kind": item.get("kind", "fact"), "title": item.get("title", ""),
-                "text": item.get("text", ""), "source": item.get("source", "migration"),
-                "updated": updated if isinstance(updated, str) else _now(),
-                "shared": bool(item.get("shared")),
-            }
             try:
+                target = self._path(ident)
+                record = self._legacy_record(ident, item)
                 self._validate(record)
+            except (OSError, ValueError):
+                remaining[ident] = item
+                continue
+            if target.exists():
+                current = self._read(target)
+                if current is not None and self._same_record(current, record):
+                    migrated += 1
+                else:
+                    remaining[ident] = item
+                continue
+            try:
                 _atomic(target, (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode(),
                         create=True, mode=0o600)
+                current = self._read(target)
+                if current is None or not self._same_record(current, record):
+                    remaining[ident] = item
+                    continue
                 migrated += 1
             except (OSError, ValueError):
-                continue
-        state.pop("memory", None)
+                remaining[ident] = item
+        if remaining:
+            state["memory"] = remaining
+        else:
+            state.pop("memory", None)
         return migrated

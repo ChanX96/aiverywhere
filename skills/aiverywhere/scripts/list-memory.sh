@@ -26,10 +26,11 @@ case $limit in ''|*[!0-9]*) fail "limit must be a positive integer" 2 ;; esac
 [ "$limit" -ge 1 ] || fail "limit must be a positive integer" 2
 if [ -n "$home" ]; then AIVERYWHERE_HOME=$home; export AIVERYWHERE_HOME; fi
 resolved=$(resolve_instance "$project")
+project=${resolved%%|*}
 instance=${resolved#*|}
 [ -f "$instance/instance.json" ] || fail "instance is not initialized: $instance" 4
 has_jq || fail "jq is required for list-memory.sh" 3
-key=$(project_key "$instance")
+key=$(project_key "$instance" "$project")
 directory=$(memory_dir "$instance" "$key")
 [ -d "$directory" ] || { printf '[]\n'; exit 0; }
 lower=$(printf '%s' "$query" | tr '[:upper:]' '[:lower:]')

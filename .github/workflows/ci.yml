@@ -35,7 +35,10 @@ jobs:
       - name: Install
         run: python -m pip install .
       - name: Smoke tests
-        run: python -m unittest discover -s tests -v
+        run: |
+          python -m unittest discover -s tests -v
+          sh tests/shell/memory.sh
+          sh tests/shell/memory-conformance.sh
 
   lint:
     runs-on: ubuntu-latest
@@ -49,7 +52,10 @@ jobs:
       - name: Installer checks
         run: |
           sh -n install.sh
-          shellcheck install.sh
+          for script in skills/aiverywhere/scripts/*.sh tests/shell/*.sh; do
+            sh -n "$script"
+          done
+          shellcheck install.sh skills/aiverywhere/scripts/*.sh tests/shell/*.sh
 
   package:
     runs-on: ubuntu-latest
@@ -73,10 +79,17 @@ jobs:
           /tmp/verify/bin/python - <<'PY'
           from importlib.resources import files
           root = files("aiverywhere")
-          for name in ("SKILL.md", "py.typed", "static/index.html", "static/app.css", "static/app.js"):
+          for name in ("SKILL.md", "py.typed", "static/index.html", "static/app.css", "static/app.js",
+                       "skill/SKILL.md", "skill/references/memory.md",
+                       "skill/scripts/init-instance.sh"):
               assert root.joinpath(name).is_file(), name
           print("packaged resources ok")
           PY
+          tmp="$(mktemp -d)"
+          mkdir -p "$tmp/project"
+          /tmp/verify/bin/aiverywhere --home "$tmp/instance" --project "$tmp/project" init >/dev/null
+          test -f "$tmp/instance/skills/aiverywhere/references/memory.md"
+          test -f "$tmp/instance/skills/aiverywhere/scripts/init-instance.sh"
 
   installer:
     runs-on: ubuntu-latest
@@ -93,18 +106,22 @@ jobs:
           mkdir -p "$tmp/project"
           HOME="$tmp/home" AIVERYWHERE_BIN_DIR="$tmp/bin" \
             ./install.sh --yes --no-cli --home "$tmp/instance" --project "$tmp/project" --source "$GITHUB_WORKSPACE"
-          test -f "$tmp/instance/data/SKILL.md"
-          test -f "$tmp/instance/data/config.json"
-          test -L "$tmp/project/.agents/skills/aiverywhere/SKILL.md"
-          bin="$tmp/instance/venv/bin/aiverywhere"
-          "$bin" --home "$tmp/instance" --project "$tmp/project" memory put '安装验收' '重复安装保留数据'
-          # The project link should locate a custom install root without --home.
-          (cd "$tmp/project" && "$bin" env | grep -F "\"instance_root\": \"$tmp/instance\"")
+          test -f "$tmp/instance/skills/aiverywhere/SKILL.md"
+          test -f "$tmp/instance/skills/aiverywhere/references/memory.md"
+          test -f "$tmp/instance/skills/aiverywhere/scripts/init-instance.sh"
+          test -L "$tmp/project/.agents/skills/aiverywhere"
+          test ! -e "$tmp/instance/venv"
+          test ! -f "$tmp/instance/data/config.json"
+          export AIVERYWHERE_HOME="$tmp/instance"
+          created=$(sh "$tmp/instance/skills/aiverywhere/scripts/write-memory.sh" \
+            --project "$tmp/project" --kind fact --title '安装验收' --text '仅宿主安装可用' --source ci)
+          entry=$(printf '%s\n' "$created" | jq -er .id)
+          sh "$tmp/instance/skills/aiverywhere/scripts/read-memory.sh" "$entry" --project "$tmp/project" |
+            grep -F '仅宿主安装可用'
           HOME="$tmp/home" AIVERYWHERE_BIN_DIR="$tmp/bin" \
             ./install.sh --yes --no-cli --home "$tmp/instance" --project "$tmp/project" --source "$GITHUB_WORKSPACE" >/dev/null
-          entry=$("$bin" --home "$tmp/instance" --project "$tmp/project" memory search '安装验收' |
-            python -c 'import json, sys; print(json.load(sys.stdin)[0]["id"])')
-          "$bin" --home "$tmp/instance" --project "$tmp/project" memory get "$entry" | grep -F '重复安装保留数据'
+          sh "$tmp/instance/skills/aiverywhere/scripts/read-memory.sh" "$entry" --project "$tmp/project" |
+            grep -F '仅宿主安装可用'
       - name: Install with optional CLI and environment credential
         run: |
           tmp="$(mktemp -d)"
@@ -114,5 +131,7 @@ jobs:
             ./install.sh --yes --cli --home "$tmp/instance" --project "$tmp/project" --source "$GITHUB_WORKSPACE"
           test -L "$tmp/bin/aiverywhere"
           "$tmp/bin/aiverywhere" --version
-          grep -F '"api_key_env": "ANTHROPIC_API_KEY"' "$tmp/instance/data/config.json"
-          test "$(stat -c '%a' "$tmp/instance/data/config.json")" = "600"
+          test -f "$tmp/instance/skills/aiverywhere/references/memory.md"
+          test -f "$tmp/instance/skills/aiverywhere/scripts/init-instance.sh"
+          grep -F '"api_key_env": "ANTHROPIC_API_KEY"' "$tmp/instance/config.json"
+          test "$(stat -c '%a' "$tmp/instance/config.json")" = "600"

@@ -211,7 +211,7 @@ if [ "$WITH_CLI" = "no" ]; then
         note "下载 skill bundle：$REPO/archive/$REF.tar.gz"
         curl -fsSL "$REPO/archive/$REF.tar.gz" | tar -xz -C "$bundle_tmp" ||
             fail "skill bundle 下载失败"
-        skill_source=$(find "$bundle_tmp" -maxdepth 3 -type f -path '*/skills/aiverywhere/SKILL.md' | sed 's#/SKILL.md$##' | head -n 1)
+        skill_source=$(find "$bundle_tmp" -type f -path '*/skills/aiverywhere/SKILL.md' -print -quit | sed 's#/SKILL.md$##')
         [ -f "$skill_source/SKILL.md" ] || fail "下载内容中没有 skills/aiverywhere/SKILL.md"
     fi
     target=$HOME_DIR/skills/aiverywhere
@@ -253,7 +253,7 @@ if [ "$WITH_CLI" = "no" ]; then
     note "aiverywhere 宿主安装完成；未安装 Python 或 CLI"
     note "  实例：  $HOME_DIR"
     note "  技能：  ${PROJECT_DIR}/.agents/skills/aiverywhere"
-    note "  记忆：  $HOME_DIR/data/memory/default/"
+    note "  记忆：  $HOME_DIR/data/memory/"
     note ""
     note "宿主读取技能目录即可工作；需要 CLI 时重新运行并加 --cli。"
     exit 0

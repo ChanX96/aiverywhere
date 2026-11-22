@@ -2,7 +2,7 @@
 
 [简体中文](install.md) | **English**
 
-Host-only installation needs macOS or Linux with POSIX `sh`; `jq` is optional. The optional CLI needs Python 3.9+. Installation is host-neutral: any agent that can read files and run commands follows the same guide. The user only needs one sentence:
+Host-only installation needs macOS or Linux with POSIX `sh`; `jq` is optional. Without it, installation and skill loading still work, while Shell memory scripts report `unavailable`. The optional CLI needs Python 3.9+. Installation is host-neutral: any agent that can read files and run commands follows the same guide. The user only needs one sentence:
 
 ```text
 Install aiverywhere: curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
@@ -75,7 +75,7 @@ After installation, a host reads:
 <project>/.agents/skills/aiverywhere/SKILL.md
 ```
 
-Use the sibling `scripts/` for memory; Python is not required. A user-level shared instance is available with `--home ~/.aiverywhere`.
+Use the sibling `scripts/` for memory; Python is not required. A user-level shared instance is available with `--home ~/.aiverywhere`. The shared root keeps a stable per-project memory key; project facts do not leak between bound projects. Without `jq`, installation and skill loading still work, while Shell memory scripts report `unavailable`.
 
 ### Common options
 

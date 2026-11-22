@@ -21,10 +21,11 @@ done
 valid_id "$ident" || fail "id must be 32 lowercase hex characters" 2
 if [ -n "$home" ]; then AIVERYWHERE_HOME=$home; export AIVERYWHERE_HOME; fi
 resolved=$(resolve_instance "$project")
+project=${resolved%%|*}
 instance=${resolved#*|}
 [ -f "$instance/instance.json" ] || fail "instance is not initialized: $instance" 4
 has_jq || fail "jq is required for read-memory.sh" 3
-key=$(project_key "$instance")
+key=$(project_key "$instance" "$project")
 file=$(memory_dir "$instance" "$key")/$ident.json
 [ -f "$file" ] || fail "memory not found" 4
 jq . "$file"

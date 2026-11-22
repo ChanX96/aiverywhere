@@ -7,6 +7,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -137,6 +138,9 @@ def file_version(path: Path):
 
 
 def skill_template():
+    packaged = files("aiverywhere").joinpath("skill/SKILL.md")
+    if packaged.is_file():
+        return packaged
     installed = files("aiverywhere").joinpath("SKILL.md")
     if installed.is_file():
         return installed
@@ -272,7 +276,28 @@ class Store:
     def session_settings(self) -> dict:
         return checked_session(self.configuration().get("session", {}))
 
+    def _seed_packaged_skill(self) -> None:
+        """Install the complete bundled skill for wheel-only CLI installs."""
+        target = self.home / "skills/aiverywhere"
+        if (target / "SKILL.md").is_file() or (self.home / "data/SKILL.md").is_file():
+            return
+        try:
+            source = files("aiverywhere").joinpath("skill")
+            if not source.joinpath("SKILL.md").is_file() or target.is_symlink():
+                return
+            from importlib.resources import as_file
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with as_file(source) as path:
+                shutil.copytree(path, target, dirs_exist_ok=False)
+            for script in (target / "scripts").glob("*.sh") if (target / "scripts").is_dir() else ():
+                script.chmod(0o755)
+        except (OSError, ValueError, AttributeError):
+            # A host-only install or a source checkout may have no packaged copy;
+            # the regular skill link/fallback still works.
+            return
+
     def initialize(self) -> dict:
+        self._seed_packaged_skill()
         info = self.skill_info()
         with self.locked():
             if self.home.name == ".aiverywhere" and self.home.parent == self.project:

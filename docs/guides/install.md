@@ -2,7 +2,7 @@
 
 **简体中文** | [English](install.en.md)
 
-仅宿主安装适用于 macOS 或 Linux、POSIX `sh`；`jq` 可选。可选 CLI 需要 Python 3.9+。安装不区分宿主产品：任意能读文件、能执行命令的 agent 使用同一份指南。用户给出下面一句话即可：
+仅宿主安装适用于 macOS 或 Linux、POSIX `sh`；`jq` 可选，缺失时仍能安装和加载 skill，但 Shell 记忆脚本会返回 `unavailable`。可选 CLI 需要 Python 3.9+。安装不区分宿主产品：任意能读文件、能执行命令的 agent 使用同一份指南。用户给出下面一句话即可：
 
 ```text
 安装 aiverywhere：curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh | sh
@@ -71,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh
 默认安装器只做宿主 bundle：
 
 1. 把 `skills/aiverywhere/` 复制到 `<项目>/.aiverywhere/skills/aiverywhere/`。
-2. 创建 `.aiverywhere/data/memory/`、`instance.json` 和项目 skill 链接。
+2. 创建 `.aiverywhere/data/memory/<project_key>/`、`instance.json` 和项目 skill 链接。项目本地实例使用 `default`；共享实例按项目路径派生稳定 key。
 3. 不调用 Python、不创建 venv、不要求模型 Key。
 4. `--cli` 才额外安装 Python 环境、命令和模型配置。
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh
 <项目>/.agents/skills/aiverywhere/SKILL.md
 ```
 
-需要记忆时使用同一目录下的 `scripts/`；不需要 Python。用户级共享实例可用 `--home ~/.aiverywhere`。
+需要记忆时使用同一目录下的 `scripts/`；不需要 Python。用户级共享实例可用 `--home ~/.aiverywhere`；同一实例根可服务多个项目，每个项目有独立记忆目录，未显式共享的 fact/skill 不会串项目。
 
 ### 常用选项
 
@@ -104,7 +104,7 @@ curl -fsSL https://raw.githubusercontent.com/ChanX96/aiverywhere/main/install.sh
 | `--yes`、`--no-input` | 不提问；宿主安装；需要 CLI 时要求模型环境变量。 |
 | `--home DIR` | 实例根，默认 `<项目>/.aiverywhere`。 |
 | `--project DIR` | 创建技能链接的项目，默认当前目录。 |
-| `--source TARGET` | pip 安装源：本地目录、wheel 或包名，适合离线和已核对的版本。 |
+| `--source TARGET` | pip 安装源：本地目录、wheel 或包名，适合离线和已核对的版本。wheel 内置完整 skill bundle；CLI 首次 `init` 会将其复制到实例。 |
 | `--ref REF` | 从 GitHub 获取的分支或标签，默认 `main`。 |
 | `--bin-dir DIR` | 命令链接目录，默认 `~/.local/bin`。 |
 | `--no-link` | 不创建项目技能链接。 |
@@ -174,7 +174,7 @@ aiverywhere web
 
 ## 5. 升级、迁移与卸载
 
-**升级**：用相同的 `--home` 和 `--project` 重新运行安装器。它复用现有虚拟环境和 `data/`，`init` 保留已有活动 agent、记忆、技能、计划和日志。升级前可停止写入并备份 `config.json` 和 `data/`。
+**升级**：用相同的 `--home` 和 `--project` 重新运行安装器。它复用现有虚拟环境和 `data/`，`init` 保留已有活动 agent、记忆、技能、计划和日志。旧 `state.json.memory` 按项目逐条迁移；成功写入并核对后才移除旧条目，其他项目或失败条目会保留，可重跑。升级前仍应停止写入并备份 `data/state.json`、`config.json` 和 `data/`，尤其是多个项目共用旧实例时。
 
 **迁移**：停止写入，复制整个 `.aiverywhere/` 到目标安装根，再在新位置运行：
 

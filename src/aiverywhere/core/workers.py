@@ -10,7 +10,7 @@ from pathlib import Path
 from .agent import Task
 from .store import atomic_write
 
-IGNORE_NAMES = (".git", ".venv", "data", "node_modules", "dist", "build", "__pycache__",
+IGNORE_NAMES = (".git", ".venv", "node_modules", "dist", "build", "__pycache__",
                 ".agents", ".aiverywhere-sandbox.sb")
 IGNORE = shutil.ignore_patterns(*IGNORE_NAMES)
 MAX_ARTIFACT = 8 * 1024 * 1024
@@ -29,14 +29,32 @@ def _snapshot(root: Path) -> dict[str, str]:
 
 
 def _workspace(parent: Task, index: int) -> tuple[Path, dict[str, str]]:
-    target = parent.store.home / "work" / parent.id / f"worker-{index}"
+    project = parent.store.project.resolve()
+    home = parent.store.home.resolve()
+    target = home / "work" / parent.id / f"worker-{index}"
     if target.exists():
         shutil.rmtree(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    ignore = IGNORE
-    if parent.store.project.resolve() == parent.store.home.resolve():
-        ignore = shutil.ignore_patterns("config.json", *IGNORE_NAMES)
-    shutil.copytree(parent.store.project, target, ignore=ignore, symlinks=True)
+    target = target.resolve()
+
+    def ignore(directory, names):
+        # Ignore the real home and this worker target by path, not by a blanket
+        # name. A project may legitimately contain directories named `data`;
+        # the instance itself must never be copied into its own work tree.
+        ignored = set(IGNORE(directory, names))
+        base = Path(directory).resolve()
+        if base == project and home == project and "config.json" in names:
+            ignored.add("config.json")
+        for candidate in (home, target):
+            try:
+                relative = candidate.relative_to(base)
+            except ValueError:
+                continue
+            if relative.parts:
+                ignored.add(relative.parts[0])
+        return ignored
+
+    shutil.copytree(project, target, ignore=ignore, symlinks=True)
     return target, _snapshot(target)
 
 

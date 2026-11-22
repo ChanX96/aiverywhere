@@ -1,0 +1,91 @@
+{
+  "cases": [
+    {
+      "name": "minimal-valid",
+      "valid": true,
+      "record": {
+        "schema_version": 1,
+        "id": "0123456789abcdef0123456789abcdef",
+        "revision": 1,
+        "kind": "fact",
+        "title": "单位",
+        "text": "用万元。",
+        "source": "host",
+        "updated": "2026-11-22T10:00:00Z"
+      }
+    },
+    {
+      "name": "shared-false-valid",
+      "valid": true,
+      "record": {
+        "schema_version": 1,
+        "id": "1123456789abcdef0123456789abcdef",
+        "revision": 2,
+        "kind": "skill",
+        "title": "技能",
+        "text": "适用条件。",
+        "source": "host",
+        "updated": "2026-11-22T10:00:00Z",
+        "shared": false
+      }
+    },
+    {
+      "name": "shared-null-invalid",
+      "valid": false,
+      "record": {
+        "schema_version": 1,
+        "id": "2123456789abcdef0123456789abcdef",
+        "revision": 1,
+        "kind": "fact",
+        "title": "单位",
+        "text": "用万元。",
+        "source": "host",
+        "updated": "2026-11-22T10:00:00Z",
+        "shared": null
+      }
+    },
+    {
+      "name": "unknown-field-invalid",
+      "valid": false,
+      "record": {
+        "schema_version": 1,
+        "id": "3123456789abcdef0123456789abcdef",
+        "revision": 1,
+        "kind": "fact",
+        "title": "单位",
+        "text": "用万元。",
+        "source": "host",
+        "updated": "2026-11-22T10:00:00Z",
+        "extra": true
+      }
+    },
+    {
+      "name": "revision-zero-invalid",
+      "valid": false,
+      "record": {
+        "schema_version": 1,
+        "id": "4123456789abcdef0123456789abcdef",
+        "revision": 0,
+        "kind": "fact",
+        "title": "单位",
+        "text": "用万元。",
+        "source": "host",
+        "updated": "2026-11-22T10:00:00Z"
+      }
+    },
+    {
+      "name": "bad-time-invalid",
+      "valid": false,
+      "record": {
+        "schema_version": 1,
+        "id": "5123456789abcdef0123456789abcdef",
+        "revision": 1,
+        "kind": "fact",
+        "title": "单位",
+        "text": "用万元。",
+        "source": "host",
+        "updated": "yesterday"
+      }
+    }
+  ]
+}

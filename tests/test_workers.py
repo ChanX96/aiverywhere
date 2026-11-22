@@ -5,6 +5,7 @@ from pathlib import Path
 
 from aiverywhere.core.agent import Task
 from aiverywhere.core.store import Store
+from aiverywhere.core.workers import _workspace
 
 
 class Provider:
@@ -17,6 +18,38 @@ class Provider:
 
 
 class WorkersTest(unittest.TestCase):
+    def test_default_layout_copies_inputs_without_recursing_into_instance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            (project / "README.md").write_text("source")
+            (project / "data").mkdir()
+            (project / "data" / "input.txt").write_text("user data")
+            store = Store(project / ".aiverywhere", project)
+            store.initialize()
+            target, _ = _workspace(Task(store), 1)
+            self.assertTrue((target / "README.md").is_file())
+            self.assertEqual((target / "data" / "input.txt").read_text(), "user data")
+            self.assertFalse((target / ".aiverywhere").exists())
+            self.assertLess(len(str(target)), 240)
+
+    def test_default_layout_delegation_returns_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            (project / "README.md").write_text("source")
+            (project / "data").mkdir()
+            (project / "data" / "input.txt").write_text("user data")
+            store = Store(project / ".aiverywhere", project)
+            store.initialize()
+            task = Task(store, writable=True, allow_workers=True)
+            asyncio.run(task.run("parent", Provider(), max_turns=4, timeout=10))
+            self.assertEqual(task.status, "completed")
+            self.assertEqual(list((project / ".aiverywhere/work").glob("**/.aiverywhere/**")), [])
+            self.assertEqual(len(task.artifacts), 2)
+
     def test_workers_write_private_workspaces_and_return_artifacts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

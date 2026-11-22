@@ -4,6 +4,15 @@ set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 skill_dir=$(CDPATH='' cd -- "$script_dir/.." && pwd -P)
+# shellcheck disable=SC1091
+. "$script_dir/common.sh"
+
+json_path() {
+  case $1 in
+    *[[:cntrl:]]*) fail "路径包含控制字符，无法写入 instance.json" 2 ;;
+  esac
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
 project=${1:-$PWD}
 link=yes
 shift || true
@@ -23,24 +32,22 @@ case $home in
   /*) ;;
   *) home=$project/$home ;;
 esac
-if [ -f "$home/instance.json" ]; then
-  existing=$(cd -- "$home" && pwd -P)
-  if [ "$existing" != "$home" ]; then
-    home=$existing
-  fi
-fi
-command -v jq >/dev/null 2>&1 || {
-  printf '%s\n' '{"status":"error","error":"jq is required for init-instance.sh"}'
-  exit 3
-}
-mkdir -p "$home/data/memory/default" "$home/data/logs/default" "$home/data/artifacts" "$home/work"
-chmod 700 "$home" "$home/data" "$home/data/memory" "$home/data/memory/default" \
+mkdir -p "$home" || fail "无法创建实例目录：$home" 2
+home=$(canonical_dir "$home") || fail "实例目录不可访问：$home" 2
+key=$(project_key "$home" "$project")
+mkdir -p "$home/data/memory/$key" "$home/data/logs/default" "$home/data/artifacts" "$home/work"
+chmod 700 "$home" "$home/data" "$home/data/memory" "$home/data/memory/$key" \
   "$home/data/logs" "$home/data/logs/default" "$home/data/artifacts" "$home/work"
 if [ ! -f "$home/instance.json" ]; then
   temporary=$home/.instance.json.$$
-  jq -n --arg project "$project" --arg home "$home" \
-    '{schema_version:1, project_key:"default", project_root:$project, instance_root:$home}' \
-    > "$temporary"
+  if has_jq; then
+    jq -n --arg project "$project" --arg home "$home" --arg key "$key" \
+      '{schema_version:1, project_key:$key, project_root:$project, instance_root:$home}' \
+      > "$temporary"
+  else
+    printf '{"schema_version":1,"project_key":"%s","project_root":"%s","instance_root":"%s"}\n' \
+      "$(json_path "$key")" "$(json_path "$project")" "$(json_path "$home")" > "$temporary"
+  fi
   chmod 600 "$temporary"
   mv "$temporary" "$home/instance.json"
 else
@@ -77,6 +84,12 @@ if [ "$link" = yes ]; then
     ln -s "$skill_dir" "$skill_link"
   fi
 fi
-jq -n --arg home "$home" --arg project "$project" --arg skill "$skill_dir" \
-  '{status:"ok", home:$home, project:$project, skill:$skill,
-    memory:($home + "/data/memory/default")}'
+if has_jq; then
+  jq -n --arg home "$home" --arg project "$project" --arg skill "$skill_dir" --arg key "$key" \
+    '{status:"ok", home:$home, project:$project, skill:$skill,
+      project_key:$key, memory:($home + "/data/memory/" + $key)}'
+else
+  printf '{"status":"ok","home":"%s","project":"%s","skill":"%s","project_key":"%s","memory":"%s"}\n' \
+    "$(json_path "$home")" "$(json_path "$project")" "$(json_path "$skill_dir")" \
+    "$(json_path "$key")" "$(json_path "$home/data/memory/$key")"
+fi

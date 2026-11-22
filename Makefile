@@ -27,11 +27,12 @@ test:
 
 test-shell:
 	sh tests/shell/memory.sh
+	sh tests/shell/memory-conformance.sh
 
 lint:
 	$(BIN)/ruff check .
 	sh -n install.sh
-	for script in skills/aiverywhere/scripts/*.sh tests/shell/memory.sh; do sh -n "$$script" || exit; done
+	for script in skills/aiverywhere/scripts/*.sh tests/shell/memory.sh tests/shell/memory-conformance.sh; do sh -n "$$script" || exit; done
 
 check: lint test test-shell
 

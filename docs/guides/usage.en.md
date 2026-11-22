@@ -232,7 +232,7 @@ sh <skill>/scripts/read-memory.sh <id>
 sh <skill>/scripts/validate-memory.sh < record.json
 ```
 
-Memory records live in `<instance>/data/memory/<project_key>/<id>.json`; the default instance is the project `.aiverywhere/`. `state.json` keeps only plans, task claims, and channel receipts. The CLI is optional and reads the same files.
+Memory records live in `<instance>/data/memory/<project_key>/<id>.json`; the default instance is the project `.aiverywhere/` with key `default`. A shared instance derives a stable `p-<sha256 prefix>` key from each canonical project path, so projects A and B do not read or write the same directory. `state.json` keeps only plans, task claims, and channel receipts. The CLI is optional and reads the same files.
 
 Optional CLI:
 

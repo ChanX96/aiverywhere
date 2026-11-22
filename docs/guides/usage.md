@@ -247,7 +247,7 @@ sh <skill>/scripts/read-memory.sh <id>
 sh <skill>/scripts/validate-memory.sh < record.json
 ```
 
-记忆是 `<实例>/data/memory/<project_key>/<id>.json`，默认实例在项目 `.aiverywhere/`。`state.json` 只保留计划、任务认领和渠道回执。CLI 可选安装，但读写同一批文件。
+记忆是 `<实例>/data/memory/<project_key>/<id>.json`，默认实例在项目 `.aiverywhere/`。项目本地实例的 key 为 `default`；共享实例按规范化项目路径派生 `p-<sha256前16位>`，因此 A、B 两个项目即使共用实例根也不会读写同一目录。`state.json` 只保留计划、任务认领和渠道回执。CLI 可选安装，但读写同一批文件。
 
 可选 CLI：
 

@@ -46,13 +46,38 @@ resolve_instance() {
   printf '%s\n' "$project|$home"
 }
 
+sha256_short() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$1" | sha256sum | awk '{print substr($1, 1, 16)}'
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | awk '{print substr($1, 1, 16)}'
+  elif command -v openssl >/dev/null 2>&1; then
+    printf '%s' "$1" | openssl dgst -sha256 -r | awk '{print substr($1, 1, 16)}'
+  else
+    fail "cannot derive a stable project key; need sha256sum, shasum or openssl" 3
+  fi
+}
+
 project_key() {
   instance=$1
-  if has_jq && [ -f "$instance/instance.json" ]; then
-    jq -er '.project_key // "default"' "$instance/instance.json"
-  else
+  project=$2
+  if [ "$instance" = "$project" ] || [ "$instance" = "$project/.aiverywhere" ]; then
     printf 'default\n'
+    return 0
   fi
+  if has_jq && [ -f "$instance/instance.json" ]; then
+    mapped=$(jq -er --arg project "$project" '.projects[$project] // empty' "$instance/instance.json" 2>/dev/null || true)
+    if [ -n "$mapped" ]; then
+      printf '%s\n' "$mapped"
+      return 0
+    fi
+    legacy=$(jq -er --arg project "$project" 'select(.project_root == $project) | .project_key' "$instance/instance.json" 2>/dev/null || true)
+    if [ -n "$legacy" ] && [ "$legacy" != "default" ]; then
+      printf '%s\n' "$legacy"
+      return 0
+    fi
+  fi
+  printf 'p-%s\n' "$(sha256_short "$project")"
 }
 
 memory_dir() {

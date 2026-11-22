@@ -141,6 +141,37 @@ printf '%s\n' '读 README，返回启动命令和依据。' |
 
 同一项目内重试同一请求 ID 可取回原任务回执。裸模型的文件工具默认只读，`--allow-write` 允许写任务文件，`--allow-exec` 允许在项目内执行命令，修订 agent 则需单独授权 `--allow-agent-edit <旧修订号>`。
 
+### CLI session 与自动 compaction
+
+交互式 CLI 默认恢复当前项目最近的 session，一个 session 一个追加式 JSONL：
+
+```text
+<实例>/data/sessions/<project_key>/<session_id>.jsonl
+```
+
+常用命令：
+
+```text
+/new                 新 session
+/resume <session-id> 恢复指定 session
+/sessions            列出当前项目 session
+/status              session、turn 数、token 估算和摘要状态
+/compact             手动压实当前上下文
+```
+
+上下文接近预算时，内核会自动摘要旧回合；原始 session 记录保留。摘要失败时使用确定性回退，压缩后仍超过硬上限会明确失败，不会静默丢上下文。配置示例：
+
+```json
+{
+  "session": {
+    "max_context_tokens": 64000,
+    "compact_at": 0.8,
+    "keep_recent_turns": 6,
+    "summary_max_chars": 4000
+  }
+}
+```
+
 ### 工具、worker 与取消
 
 文件工具包括 `list_files`、`read_file`、`search_files`、`write_file` 和 `edit_file`。`write_file`/`edit_file` 需要 `--allow-write`；`edit_file` 用读取到的 SHA-256 和唯一匹配片段，冲突时拒绝覆盖。`run_command(argv, cwd, timeout)` 需要 `--allow-exec`，返回退出码、限长输出和超时标记；取消时会终止进程组。`web_search` 使用免 Key 的 Bing RSS，失败时回退 DuckDuckGo HTML，`web_fetch` 只读取公开文本页面，拒绝内网和保留地址。

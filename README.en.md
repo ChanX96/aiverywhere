@@ -41,6 +41,14 @@ The default install copies the skill bundle, creates `<project>/.aiverywhere/`, 
 
 Each record has a stable ID, incremented `revision`, one of `fact` / `skill` / `clue`, and a fixed JSON Schema. `state.json` is reserved for plans, task claims, and channel receipts.
 
+CLI sessions are stored separately:
+
+```text
+.aiverywhere/data/sessions/<project_key>/<session_id>.jsonl
+```
+
+Each session is an append-only file with locking, sequence numbers, and crash recovery; `state.json` does not contain conversation bodies.
+
 ### Host and CLI share one memory
 
 Shell records are immediately visible to the CLI, and CLI records are readable from the host scripts. The CLI reuses the same `validate-memory.sh` before writing.
@@ -181,6 +189,10 @@ Type `/` to open the command menu:
 | --- | --- |
 | `/help` | Show help |
 | `/new` | Start a new session |
+| `/resume <id>` | Resume a specific session |
+| `/sessions` | List project sessions |
+| `/status` | Session, turns, and token estimate |
+| `/compact` | Compact the current context |
 | `/jobs` | Show tasks in this process |
 | `/cancel` | Cancel the current task |
 | `/ask <id> <question>` | Ask a follow-up against a completed task |

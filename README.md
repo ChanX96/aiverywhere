@@ -56,6 +56,14 @@
 - JSON Schema 固定格式；
 - `state.json` 只保存计划、任务和渠道回执，不再混入记忆正文。
 
+CLI 的持久会话在：
+
+```text
+.aiverywhere/data/sessions/<project_key>/<session_id>.jsonl
+```
+
+一条 session 一个追加式文件，带锁、序号和崩溃恢复；`state.json` 不保存会话正文。
+
 ### 3. 宿主和 CLI 共用记忆
 
 Shell 写下的记录，CLI 可以立即检索；CLI 写入的记录，宿主也能读取。
@@ -95,6 +103,15 @@ Dream、计划、任务回执和 worker 都围绕这套约定工作。
 - Web 只绑定回环地址；
 - 页面资源随包分发，不依赖 CDN；
 - 不注册系统服务，不修改 shell 启动文件。
+
+### 8. 持久会话与自动 compaction
+
+CLI 默认恢复当前项目最近的 session；会话写入追加式 JSONL，崩溃后只恢复到完整记录。上下文接近预算时自动摘要旧回合，原始记录不删除；摘要失败则使用确定性回退，仍超限时明确失败而不是静默丢上下文。
+
+```sh
+aiverywhere
+# 输入 / 查看命令菜单
+```
 
 ## 架构
 
@@ -222,6 +239,10 @@ aiverywhere ›
 | --- | --- |
 | `/help` | 显示帮助 |
 | `/new` | 开始一个新的会话 |
+| `/resume <id>` | 恢复指定 session |
+| `/sessions` | 列出当前项目的 session |
+| `/status` | 当前 session、turn 数、token 估算 |
+| `/compact` | 手动压实当前上下文 |
 | `/jobs` | 查看当前进程内的任务 |
 | `/cancel` | 取消当前任务 |
 | `/ask <id> <问题>` | 向已完成任务追加问题 |
@@ -306,7 +327,8 @@ aiverywhere memory forget <id>
 - Shell 与 CLI 双向读写同一记忆；
 - 旧 `state.json` 记忆迁移；
 - 工具、worker、流式输出和 Web 基础路径；
-- Bing RSS 真实搜索。
+- Bing RSS 真实搜索；
+- session 恢复、锁、部分写入修复和自动 compaction 单元测试。
 
 仍待验证或完善：
 

@@ -21,6 +21,7 @@ import httpx
 from aiverywhere.core.agent import Messages, Task
 from aiverywhere.cli import invoke
 from aiverywhere.core.store import Store
+from aiverywhere.core.session import SessionStore
 from aiverywhere.integrations import wechat
 from aiverywhere.integrations.web.server import create_server
 
@@ -80,7 +81,7 @@ class Smoke(unittest.TestCase):
         self.assertEqual(self.store.agent_file.read_text(), source)
         cfg = Path(info["config"])
         self.assertEqual(json.loads(cfg.read_text()),
-                         {"model": {"model": "original"}, "defaults": {}, "mcpServers": {}, "wechat": {}})
+                         {"model": {"model": "original"}, "defaults": {}, "mcpServers": {}, "wechat": {}, "session": {}})
         cfg.write_text('{"model":{"model":"updated"}}')
         self.cli("init")
         self.assertEqual(self.store.configuration()["model"]["model"], "updated")
@@ -207,7 +208,7 @@ class Smoke(unittest.TestCase):
 
     def test_chat_cancel_stops_current_task_and_keeps_prompt(self):
         class Slow:
-            async def agentloop(self, task, environment, messages, prompt, max_turns, checkpoint):
+            async def agentloop(self, task, environment, messages, prompt, max_turns, checkpoint, **kwargs):
                 await asyncio.sleep(10)
                 return "should not arrive", messages
 
@@ -229,6 +230,80 @@ class Smoke(unittest.TestCase):
             results = [event for event in events if event["event"] == "result"]
             self.assertEqual(results[0]["status"], "cancelled")
             self.assertEqual(results[0]["answer"], "")
+
+        asyncio.run(run())
+
+    def test_chat_resumes_latest_session_after_process_restart(self):
+        async def run():
+            requests = []
+
+            async def reply(request):
+                body = json.loads(request.content)
+                requests.append(body)
+                return httpx.Response(200, json={"stop_reason": "end_turn",
+                    "content": [{"type": "text", "text": "done:" + body["messages"][-1]["content"]}]})
+
+            self.store.initialize()
+            (self.store.config_path).write_text(
+                '{"model":{"model":"test","base_url":"http://test.invalid"}}')
+
+            def args():
+                return argparse.Namespace(command="chat", json=True, allow_write=False,
+                                          allow_exec=False, max_turns=3, model=None,
+                                          timeout=5, host=None, mcp=[], agent_edit=None,
+                                          new_session=False)
+
+            async def lines(values):
+                for value in values:
+                    yield value
+
+            client = httpx.AsyncClient(transport=httpx.MockTransport(reply))
+            with patch("httpx.AsyncClient", return_value=client),                     patch("aiverywhere.cli.main.input_lines", lambda: lines(["first", "/quit"])),                     redirect_stdout(io.StringIO()):
+                await asyncio.wait_for(invoke(args(), self.store), 3)
+            sessions = SessionStore(self.store)
+            first = sessions.latest()
+            self.assertIsNotNone(first)
+            first_id = first.id
+            first.release()
+
+            client = httpx.AsyncClient(transport=httpx.MockTransport(reply))
+            with patch("httpx.AsyncClient", return_value=client),                     patch("aiverywhere.cli.main.input_lines", lambda: lines(["second", "/quit"])),                     redirect_stdout(io.StringIO()):
+                await asyncio.wait_for(invoke(args(), self.store), 3)
+            second = SessionStore(self.store).latest()
+            self.assertEqual(second.id, first_id)
+            second.release()
+            self.assertEqual([m["content"] for m in second.history()],
+                             ["first", [{"type": "text", "text": "done:first"}],
+                              "second", [{"type": "text", "text": "done:second"}]])
+            self.assertIn("first", json.dumps(requests[1]["messages"], ensure_ascii=False))
+
+        asyncio.run(run())
+
+    def test_new_command_starts_a_second_session(self):
+        async def run():
+            async def reply(request):
+                body = json.loads(request.content)
+                return httpx.Response(200, json={"stop_reason": "end_turn",
+                    "content": [{"type": "text", "text": "done:" + body["messages"][-1]["content"]}]})
+
+            self.store.initialize()
+            (self.store.config_path).write_text(
+                '{"model":{"model":"test","base_url":"http://test.invalid"}}')
+
+            async def lines():
+                for value in ("one", "/new", "two", "/quit"):
+                    yield value
+
+            args = argparse.Namespace(command="chat", json=True, allow_write=False,
+                                      allow_exec=False, max_turns=3, model=None,
+                                      timeout=5, host=None, mcp=[], agent_edit=None,
+                                      new_session=False)
+            client = httpx.AsyncClient(transport=httpx.MockTransport(reply))
+            with patch("httpx.AsyncClient", return_value=client),                     patch("aiverywhere.cli.main.input_lines", lines), redirect_stdout(io.StringIO()):
+                await asyncio.wait_for(invoke(args, self.store), 3)
+            rows = SessionStore(self.store).list()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(len({row["id"] for row in rows}), 2)
 
         asyncio.run(run())
 
@@ -293,7 +368,7 @@ class Smoke(unittest.TestCase):
 
     def test_web_chat_runs_a_task_and_returns_status(self):
         class Provider:
-            async def agentloop(self, task, environment, messages, prompt, max_turns, checkpoint):
+            async def agentloop(self, task, environment, messages, prompt, max_turns, checkpoint, **kwargs):
                 return ("网页回答" if not task.writable else "网页回答（可写）"), messages
 
         self.store.initialize()

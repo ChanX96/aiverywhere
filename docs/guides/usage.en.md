@@ -141,6 +141,26 @@ printf '%s\n' 'Read the README, return the startup command and the evidence.' |
 
 Retrying the same request ID in the same project returns the original task receipt. Raw-model file tools are read-only by default; `--allow-write` permits writing task files, `--allow-exec` permits commands inside the project, and revising the agent requires separate authorization with `--allow-agent-edit <old-revision>`.
 
+### CLI sessions and automatic compaction
+
+The interactive CLI resumes the latest session for the project by default. Each session is an append-only JSONL file:
+
+```text
+<instance>/data/sessions/<project_key>/<session_id>.jsonl
+```
+
+Commands:
+
+```text
+/new                 start a new session
+/resume <session-id> resume a specific session
+/sessions            list project sessions
+/status              show session, turns, token estimate, and summary state
+/compact             manually compact the current context
+```
+
+When the context approaches its budget, the kernel summarizes old turns; raw session records are retained. If summarization fails, a deterministic fallback is used. If the compacted request still exceeds the hard limit, the request fails explicitly instead of silently dropping context.
+
 ### Tools, workers, and cancellation
 
 File tools are `list_files`, `read_file`, `search_files`, `write_file`, and `edit_file`. Writes and edits require `--allow-write`; `edit_file` uses the SHA-256 from the read and a unique fragment, refusing stale or ambiguous edits. `run_command(argv, cwd, timeout)` requires `--allow-exec`, returns an exit code, bounded output, and a timeout flag, and terminates the process group on cancellation. `web_search` uses keyless Bing RSS and falls back to DuckDuckGo HTML; `web_fetch` reads only public text pages and rejects loopback, private, and reserved addresses.

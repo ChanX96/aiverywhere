@@ -20,8 +20,10 @@ from .store_errors import RevisionConflict
 
 
 RUNTIME_KEYS = ("plans", "jobs", "runs", "notices")
-CONFIG_SECTIONS = ("model", "defaults", "mcpServers", "wechat")
+CONFIG_SECTIONS = ("model", "defaults", "mcpServers", "wechat", "session")
 RUNTIME_DEFAULTS = {"max_turns": 12, "timeout": 180, "port": 8765}
+SESSION_DEFAULTS = {"max_context_tokens": 64000, "compact_at": 0.8,
+                    "keep_recent_turns": 6, "summary_max_chars": 4000}
 
 
 def runtime_fields(state: dict) -> dict:
@@ -93,6 +95,27 @@ def checked_defaults(raw: dict) -> dict:
                 raise ValueError("defaults.port 须在 0–65535 之间")
         elif value <= 0:
             raise ValueError(f"defaults.{key} 需要正整数")
+        merged[key] = value
+    return merged
+
+
+def checked_session(raw: dict) -> dict:
+    """Validate the optional session budget partition."""
+    if not isinstance(raw, dict) or raw.keys() - SESSION_DEFAULTS.keys():
+        raise ValueError("config.json 的 session 只支持 max_context_tokens、compact_at、keep_recent_turns、summary_max_chars")
+    merged = dict(SESSION_DEFAULTS)
+    for key, value in raw.items():
+        if key == "compact_at":
+            if type(value) not in (int, float) or not 0 < float(value) < 1:
+                raise ValueError("session.compact_at 须在 0 和 1 之间")
+        elif type(value) is not int:
+            raise ValueError(f"session.{key} 需要整数")
+        if key == "max_context_tokens" and value < 1000:
+            raise ValueError("session.max_context_tokens 至少为 1000")
+        if key == "keep_recent_turns" and value < 1:
+            raise ValueError("session.keep_recent_turns 至少为 1")
+        if key == "summary_max_chars" and not 200 <= value <= 16000:
+            raise ValueError("session.summary_max_chars 须在 200–16000 之间")
         merged[key] = value
     return merged
 
@@ -238,12 +261,16 @@ class Store:
                     cfg[key] = value
         if (not isinstance(cfg, dict) or cfg.keys() - set(CONFIG_SECTIONS)
                 or not all(isinstance(value, dict) for value in cfg.values())):
-            raise ValueError("config.json 的可选分区为 model、defaults、mcpServers、wechat，每个分区须为对象")
+            raise ValueError("config.json 的可选分区为 model、defaults、mcpServers、wechat、session，每个分区须为对象")
+        checked_session(cfg.get("session", {}))
         return cfg
 
     def defaults(self) -> dict:
         """Built-in run budgets, overridden by the optional defaults section."""
         return checked_defaults(self.configuration().get("defaults", {}))
+
+    def session_settings(self) -> dict:
+        return checked_session(self.configuration().get("session", {}))
 
     def initialize(self) -> dict:
         info = self.skill_info()

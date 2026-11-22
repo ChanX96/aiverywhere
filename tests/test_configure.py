@@ -100,9 +100,16 @@ class Configure(unittest.TestCase):
     def test_cli_exposes_slash_command_menu(self):
         from aiverywhere.cli.main import SLASH_COMMANDS, _slash_matches
         commands = {command for command, _ in SLASH_COMMANDS}
-        self.assertEqual(commands, {"/help", "/new", "/jobs", "/cancel", "/ask", "/quit"})
+        self.assertEqual(commands, {"/help", "/new", "/resume", "/sessions", "/status", "/compact", "/jobs", "/cancel", "/ask", "/quit"})
         self.assertEqual({command for command, _ in _slash_matches("/")}, commands)
         self.assertEqual([command for command, _ in _slash_matches("/he")], ["/help"])
+
+    def test_session_settings_are_validated(self):
+        self.store.initialize()
+        self.assertEqual(self.store.session_settings()["compact_at"], 0.8)
+        self.store.config_path.write_text('{"session":{"compact_at":1.2}}')
+        with self.assertRaises(ValueError):
+            self.store.session_settings()
 
     def test_welcome_wordmark_is_generated_from_exact_letters(self):
         self.assertEqual(WORDMARK, "AIVERYWHERE")

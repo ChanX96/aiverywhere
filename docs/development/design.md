@@ -217,9 +217,54 @@ aiverywhere 启动或从休眠恢复时，按当前用户核对上次检查以�
 
 源码或专用虚拟环境内可以直接运行，使用共享 Python 时显式选择 `--home`。默认启动、读取 skill、查看环境以及 `wake` 均不注册系统服务。安装器只在用户选择的安装根写入虚拟环境、`config.json`、`data/` 和可回收的 `work/`，并可选创建一个 `~/.local/bin` 命令链接和一个项目技能链接；不请求 `sudo`，不修改 shell 启动文件，不写入 cron、launchd 或 systemd 注册文件。已有宿主可按路径读取文件，用户无需全局安装 skill。外部调度器由用户自行管理；后台运行所需的凭据及宿主自身的缓存、日志与权限由该宿主配置管理。
 
+### 稳定内核与数据驱动能力
+
+内核只保留四类稳定机制：一次任务循环、受版本约束的工具协议、可校验的记忆格式，以及可恢复的 session/journal。能力优先通过数据扩展：
+
+| 能力层 | 扩展方式 | 内核发版 |
+| --- | --- | --- |
+| 行为 | `SKILL.md` 和 references | 不需要 |
+| 经验 | memory 的 fact/skill/clue | 不需要 |
+| 外部系统 | MCP server 和配置 | 通常不需要 |
+| 网络/文件 | 通用 web/file 工具 | 不需要 |
+| 新原语 | 新工具类型、新事件格式、权限模型 | 需要且应低频 |
+
+不把某个 App 的页面、接口或流程写进内核。某个 App 的用法先用 skill + `web_search`/`web_fetch` 表达；需要长期复用时写成 memory skill；需要专用协议时接 MCP。只有改变内核原语才发新版本。
+
+### CLI session 与自动 compaction
+
+CLI 的交互会话按项目存放在 `<实例>/data/sessions/<project_key>/<session_id>.jsonl`。session 文件第一行是 `schema=1` 的头，之后是带递增 `seq` 的 `turn_start`、`turn`、`turn_error` 和 `summary` 事件。原始回合不被重写；`summary` 只改变下一次模型请求使用的上下文视图。
+
+写入规则：
+
+- 同一 session 由一个进程持有 `flock` 排他锁；
+- 每个事件完整写入并 `fsync` 后才推进内存序号；
+- 崩溃留下不完整尾行时，恢复从最后一个完整事件开始，下一次写入先截断残缺尾部；
+- `turn_start` 没有配对的 `turn`/`turn_error` 时，恢复后标记 `result_unknown`，不把中断的工具调用当成成功；
+- 文件权限 0600，目录 0700；session 正文可能含用户资料，不进入 Git。
+
+默认 `aiverywhere` 恢复当前项目最近 session；`--new` 或 `/new` 开始新会话，`/resume <id>` 恢复指定会话，`/sessions` 列出，`/status` 显示 turn 数、估算 token 和摘要状态，`/compact` 手动压实。
+
+`ContextManager` 在每次模型请求前估算 system、消息和工具定义的 token。超过 `session.compact_at * session.max_context_tokens` 时，保留最近完整回合，把更早的回合交给同一模型做无工具摘要；摘要请求失败或端点不支持时使用确定性摘要；压缩后仍超过 `max_context_tokens` 则明确失败。摘要事件记录 `method`、`covers_messages` 和创建时间；原始 session 不删除，摘要不是事实来源。
+
+默认配置：
+
+```json
+{
+  "session": {
+    "max_context_tokens": 64000,
+    "compact_at": 0.8,
+    "keep_recent_turns": 6,
+    "summary_max_chars": 4000
+  }
+}
+```
+
+第一版不自动删除旧 session；用户可用 `/sessions` 查看并显式清理。
+
 ### CLI 如何顺序处理输入
 
-交互式 CLI 一次只推进一个前台任务；运行期间的输入进入队列，只用于 `/cancel`、`/cancel <worker-id>` 或排队下一条任务，不启动第二个前台循环。任务完成后可用 `/ask ID 内容` 追问，用 `/jobs` 查看最近状态。并行只发生在主任务内部的深度 1 worker；这与宿主当前会话的“一次推进一个回合”保持一致。
+交互式 CLI 一次只推进一个前台任务；运行期间的输入进入队列，只用于 `/cancel`、`/cancel <worker-id>`、`/quit` 或排队下一条输入，不启动第二个前台循环。连续输入共享同一个 session 和 Task 历史；只有 `/new` 或 `--new` 切换 session。`/ask` 用于向当前 session 的已完成任务追问，`/jobs` 查看最近状态。并行只发生在主任务内部的深度 1 worker；这与宿主当前会话的“一次推进一个回合”保持一致。
 
 需要并行推进独立任务时，使用多个终端、多个宿主 subagent 或分别调用 `run`；不同进程仍用同一把实例文件锁和修订号保护状态。验收时提交两行任务，确认它们按顺序完成且输出归属正确；在任务运行中关闭进程，确认已发起的动作保留可核对的回执。
 ### 两种环境怎样交接一个任务

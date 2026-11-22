@@ -232,7 +232,7 @@ class Messages:
         return {"content": content, "stop_reason": stop_reason}
 
     async def agentloop(self, task: Task, environment: dict, messages: list, prompt: str, max_turns: int,
-                        checkpoint, on_text=None):
+                        checkpoint, on_text=None, context_manager=None):
         """Advance one Messages task until the model returns final text or exhausts its budget."""
         async with AsyncExitStack() as resources:
             remote = RemoteTools(task.store, task.mcp_servers, resources)
@@ -254,10 +254,17 @@ class Messages:
                 if task.review_requested:
                     context += "\n请对照原始目标与已有证据复核方向，必要时修正下一步。"
                     task.review_requested = False
+                tools_now = list(task.tools.active.values())
+                request_messages = messages
+                if context_manager is not None:
+                    before = context_manager.compactions
+                    request_messages = await context_manager.view(context, messages, tools_now)
+                    if context_manager.compactions != before:
+                        task.compactions += context_manager.compactions - before
                 if on_text is None:
-                    data = await self.send(context, messages, list(task.tools.active.values()))
+                    data = await self.send(context, request_messages, tools_now)
                 else:
-                    data = await self.stream_send(context, messages, list(task.tools.active.values()), on_text)
+                    data = await self.stream_send(context, request_messages, tools_now, on_text)
                 blocks = data["content"]
                 if any(not isinstance(b, dict) for b in blocks):
                     raise ValueError("无效的模型消息块")
@@ -437,7 +444,7 @@ class Task:
 
     async def run(self, prompt: str, provider: Messages | Native | Callable[[], Messages | Native],
                   *, max_turns: int = 12, timeout: int = 180,
-                  checkpoint=None, on_text=None):
+                  checkpoint=None, on_text=None, context_manager=None):
         self.status, self.answer, self.error = "running", "", ""
         messages = [*self.history, {"role": "user", "content": prompt}]
         try:
@@ -462,6 +469,8 @@ class Task:
                 self.history = [*messages, {"role": "assistant", "content": self.answer}]
             else:
                 kwargs = {"on_text": on_text} if on_text is not None else {}
+                if context_manager is not None:
+                    kwargs["context_manager"] = context_manager
                 turns = provider.agentloop(self, environment, messages, prompt, max_turns, checkpoint, **kwargs)
                 self.answer, self.history = await asyncio.wait_for(turns, timeout)
             self.status = "completed"

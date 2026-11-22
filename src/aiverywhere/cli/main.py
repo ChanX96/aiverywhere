@@ -21,6 +21,8 @@ from ..core.dream import dream as run_dream, has_clues
 from ..core.agent import Messages, Native, Task, executor
 from ..platform.environment import inspect_environment
 from ..core.store import Store, instance_root, skill_text
+from ..core.session import Session, SessionStore
+from ..core.context import ContextManager
 
 
 def positive(value: str) -> int:
@@ -44,6 +46,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--project", type=Path, default=Path.cwd(), help="绑定该任务的工作目录")
     root.add_argument("--host", help="由调用者声明的宿主名称，可省略")
     root.add_argument("--confirm-shared", action="store_true", help="用户已同意本次使用共用技能")
+    root.add_argument("--new", dest="new_session", action="store_true", help="开始新的 CLI session（默认恢复最近 session）")
     sub = root.add_subparsers(dest="command")
     sub.add_parser("welcome", help="显示欢迎屏；直接运行 aiverywhere 会显示并进入交互")
     sub.add_parser("init", help="在安装根 data/ 中准备活动 agent 和统一配置，保留已有数据")
@@ -80,6 +83,7 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("prompt", help="任务内容；传 - 可从标准输入读取")
     run.add_argument("--task-id", help="宿主分配的请求 ID，同一项目的重复请求返回已有回执")
     chat = sub.add_parser("chat", help="交互式 CLI，一次推进一个前台任务，可 /cancel")
+    chat.add_argument("--new", dest="new_session", action="store_true", help="开始新的 CLI session")
     for command in (run, chat):
         command.add_argument("--model", help="Anthropic 兼容端点的模型名（或 AIVERYWHERE_MODEL）")
         command.add_argument("--mcp", action="append", default=[], metavar="NAME",
@@ -233,6 +237,10 @@ async def input_lines():
 SLASH_COMMANDS = (
     ("/help", "显示帮助"),
     ("/new", "开始一个新的会话"),
+    ("/resume", "恢复指定 session：/resume <id>"),
+    ("/sessions", "列出当前项目的 session"),
+    ("/status", "当前 session 和上下文预算"),
+    ("/compact", "手动压实当前上下文"),
     ("/jobs", "查看任务状态"),
     ("/cancel", "取消当前任务"),
     ("/ask", "向已完成任务追加问题：/ask <task-id> <问题>"),
@@ -290,23 +298,30 @@ def _start_terminal_reader(loop, queue) -> threading.Thread | None:
 
 
 async def chat(args, store: Store, provider) -> int:
-    """Keep one foreground agent session and one task per user turn."""
+    """Keep one foreground agent session and one Task for the whole conversation."""
     tasks: dict[str, Task] = {}
+    sessions = SessionStore(store)
+    session: Session | None = None
+    manager: ContextManager | None = None
+    task: Task | None = None
 
     def emit(**fields):
         output(fields, args.json)
 
+    def message(text: str):
+        emit(event="help", message=text)
+
     def select_provider():
         return provider() if callable(provider) else provider
 
-    async def execute(task: Task, prompt: str):
+    async def execute(candidate: Task, prompt: str):
         streamed = False
         if not args.json and sys.stdout.isatty():
             def worker_event(event):
                 action = f" · {event['action']}" if event.get("action") else ""
                 print(f"\n[worker {event.get('id')}] {event.get('status')}{action}  {event.get('description', '')}",
                       file=sys.stderr, flush=True)
-            task.worker_callback = worker_event
+            candidate.worker_callback = worker_event
 
         def on_text(delta: str):
             nonlocal streamed
@@ -316,24 +331,101 @@ async def chat(args, store: Store, provider) -> int:
             sys.stdout.write(delta)
             sys.stdout.flush()
 
-        emit(event="accepted", task_id=task.id, status="queued")
-        emit(event="start", task_id=task.id, status="running")
+        emit(event="accepted", task_id=candidate.id, status="queued")
+        emit(event="start", task_id=candidate.id, status="running")
         try:
-            await task.run(prompt, select_provider(), max_turns=args.max_turns, timeout=args.timeout,
-                           on_text=on_text if not args.json else None)
+            await candidate.run(prompt, select_provider(), max_turns=args.max_turns,
+                                timeout=args.timeout,
+                                on_text=on_text if not args.json else None,
+                                context_manager=manager)
         except asyncio.CancelledError:
             # Task.run has already recorded the cancelled status and audit row.
             pass
         finally:
             if streamed:
                 print(flush=True)
-        result = task.result()
+        result = candidate.result()
         if streamed and not args.json:
             result = result | {"answer": ""}
         emit(event="result", **result)
 
-    help_text = ("多轮会话：每行续接当前会话，输入 / 显示命令菜单。"
-                 "/help 帮助、/new 新会话、/jobs 状态、/cancel 取消、/ask 追问、/quit 退出。")
+    async def run_turn(candidate: Task, prompt: str):
+        nonlocal current
+        history_before = len(candidate.history)
+        assert session is not None
+        turn_id = session.begin_turn(prompt)
+        try:
+            await execute(candidate, prompt)
+        except asyncio.CancelledError:
+            candidate.status = "cancelled"
+            raise
+        except Exception as exc:
+            candidate.status = "failed"
+            candidate.error = str(exc) or type(exc).__name__
+            raise
+        finally:
+            try:
+                if candidate.status == "completed":
+                    new_messages = candidate.history[history_before:]
+                    session.finish_turn(turn_id, new_messages, candidate.answer,
+                                        candidate.status)
+                else:
+                    session.fail_turn(turn_id, candidate.status, candidate.error)
+            except (OSError, ValueError) as exc:
+                candidate.warning = f"session 写入失败：{exc}"
+                emit(event="help", message=candidate.warning)
+
+    def open_session(*, new: bool = False, ident: str | None = None) -> Task:
+        nonlocal session, manager, task
+        previous = session
+        candidate = None
+        try:
+            if ident is not None:
+                candidate = sessions.open(ident)
+                candidate.acquire()
+            elif new:
+                candidate = sessions.create()
+            else:
+                candidate = sessions.latest()
+                if candidate is None:
+                    candidate = sessions.create()
+                else:
+                    candidate.acquire()
+            candidate.load()
+            if candidate.resolve_pending():
+                message(f"恢复 session {candidate.id}；上次回合结果未知，已记录待核对。")
+            new_task = Task(store, writable=args.allow_write, exec_allowed=args.allow_exec,
+                            entry="chat", host=args.host, mcp_servers=tuple(args.mcp),
+                            agent_edit=args.agent_edit, allow_workers=True, id=candidate.id)
+            new_task.history = candidate.history()
+            summary = candidate.summary()
+
+            def persist_summary(text: str, method: str, covers: int):
+                candidate.append_summary(text, method=method, covers_messages=covers)
+                if not args.json:
+                    message(f"context compacted（{method}，覆盖 {covers} 条消息；原始 session 保留）")
+
+            new_manager = ContextManager(store, lambda: select_provider(), summary=summary,
+                                         settings=store.session_settings(),
+                                         on_summary=persist_summary)
+            if previous is not None and previous is not candidate:
+                previous.release()
+            session = candidate
+            task = new_task
+            manager = new_manager
+            tasks.clear()
+            tasks[task.id] = task
+            if not args.json:
+                message(f"session {candidate.id} {'已恢复' if previous else '已开始'}")
+            return task
+        except Exception:
+            if candidate is not None and candidate is not previous and candidate._lock is not None:
+                candidate.release()
+            raise
+
+    help_text = ("多轮会话：每行续接当前 session，输入 / 显示命令菜单。"
+                 "/help 帮助、/new 新会话、/resume 恢复、/sessions 列表、"
+                 "/compact 压实、/status 状态、/jobs 任务、/cancel 取消、/ask 追问、/quit 退出。")
 
     def prompt():
         if sys.stdin.isatty() and not sys.stdin.closed:
@@ -355,21 +447,6 @@ async def chat(args, store: Store, provider) -> int:
     reader = None if terminal_thread is not None else asyncio.create_task(read_lines())
     current: asyncio.Task | None = None
     quitting = False
-    session: Task | None = None
-
-    def new_session() -> Task:
-        nonlocal session
-        task = Task(store, writable=args.allow_write, exec_allowed=args.allow_exec,
-                    entry="chat", host=args.host, mcp_servers=tuple(args.mcp),
-                    agent_edit=args.agent_edit, allow_workers=True)
-        session = task
-        tasks.clear()
-        tasks[task.id] = task
-        emit(event="help", message=f"新会话已开始：{task.id}")
-        return task
-
-    def current_session() -> Task:
-        return session if session is not None else new_session()
 
     def interrupt():
         nonlocal current
@@ -383,6 +460,7 @@ async def chat(args, store: Store, provider) -> int:
     except (NotImplementedError, RuntimeError):
         pass
     try:
+        open_session(new=bool(getattr(args, "new_session", False)))
         while not quitting:
             if terminal_thread is None:
                 prompt()
@@ -396,34 +474,82 @@ async def chat(args, store: Store, provider) -> int:
                 if current is not None and not current.done():
                     current.cancel()
                 else:
-                    emit(event="help", message="当前没有正在运行的任务。")
+                    message("当前没有正在运行的任务。")
                 continue
             if line == "/help":
-                emit(event="help", message=help_text)
+                message(help_text)
                 continue
             if line == "/new":
                 if current is not None and not current.done():
-                    emit(event="help", message="当前任务仍在运行；先 /cancel，再开始新会话。")
+                    message("当前任务仍在运行；先 /cancel，再开始新会话。")
                 else:
-                    new_session()
+                    try:
+                        open_session(new=True)
+                    except (OSError, ValueError) as exc:
+                        message(f"开始新 session 失败：{exc}")
+                continue
+            if line == "/resume":
+                message("用法：/resume <session-id>")
+                continue
+            if line.startswith("/resume "):
+                if current is not None and not current.done():
+                    message("当前任务仍在运行；先 /cancel，再恢复会话。")
+                else:
+                    ident = line.split(maxsplit=1)[1].strip()
+                    try:
+                        open_session(ident=ident)
+                    except (OSError, ValueError) as exc:
+                        message(f"恢复 session 失败：{exc}")
+                continue
+            if line == "/sessions":
+                rows = sessions.list()
+                if not rows:
+                    message("当前项目还没有 session。")
+                else:
+                    text = "\n".join(
+                        f"{row['id']}  turns={row['turns']}  {'pending' if row['pending'] else ''}  "
+                        f"summary={row['summary_method'] or '-'}" for row in rows[:20])
+                    message(text)
+                continue
+            if line == "/status":
+                assert session is not None and task is not None and manager is not None
+                info = session.info()
+                tokens = manager.estimate(task.instructions({}), task.history,
+                                          list(task.tools.active.values()))
+                message(f"session={info['id']} turns={info['turns']} pending={info['pending']} "
+                        f"summary={info['summary_method'] or '-'} tokens~{tokens}/{manager.max_tokens}")
+                continue
+            if line == "/compact":
+                if current is not None and not current.done():
+                    message("当前任务仍在运行；完成或取消后再压实。")
+                elif task is None or manager is None:
+                    message("当前没有可压实的会话。")
+                else:
+                    try:
+                        await manager.force(task.instructions({}), task.history,
+                                            list(task.tools.active.values()))
+                        message("当前上下文已压实；原始 session 记录保留。")
+                    except (OSError, ValueError) as exc:
+                        message(f"压实失败：{exc}")
                 continue
             if line == "/jobs":
-                for task in tasks.values():
-                    emit(event="status", task_id=task.id, status=task.status)
+                for candidate in tasks.values():
+                    emit(event="status", task_id=candidate.id, status=candidate.status)
                 continue
-            task: Task | None = None
+            target: Task | None = None
             if line.startswith("/"):
                 cmd, _, rest = line.partition(" ")
                 ident, _, followup = rest.partition(" ")
-                task = tasks.get(ident)
-                if cmd == "/ask" and task and followup.strip():
-                    task_handle = asyncio.create_task(execute(task, followup))
+                target = tasks.get(ident)
+                if cmd == "/ask" and target and followup.strip():
+                    task_handle = asyncio.create_task(run_turn(target, followup))
                 else:
-                    emit(event="help", message=help_text)
+                    message(help_text)
                     continue
             else:
-                task = current_session()
-                task_handle = asyncio.create_task(execute(task, line))
+                assert task is not None
+                target = task
+                task_handle = asyncio.create_task(run_turn(target, line))
             current = task_handle
             while True:
                 getter = asyncio.create_task(queue.get())
@@ -435,8 +561,8 @@ async def chat(args, store: Store, provider) -> int:
                         task_handle.cancel()
                     elif incoming.startswith("/cancel "):
                         ident = incoming.split(maxsplit=1)[1].strip()
-                        if not task.cancel_worker(ident):
-                            emit(event="help", message=f"没有找到 worker {ident}。")
+                        if not target.cancel_worker(ident):
+                            message(f"没有找到 worker {ident}。")
                     elif incoming == "/quit":
                         task_handle.cancel()
                         quitting = True
@@ -460,6 +586,8 @@ async def chat(args, store: Store, provider) -> int:
             loop.remove_signal_handler(signal.SIGINT)
         except (NotImplementedError, RuntimeError):
             pass
+        if session is not None:
+            session.release()
         if reader is not None:
             reader.cancel()
             with suppress(asyncio.CancelledError):
@@ -572,13 +700,14 @@ async def invoke(args, store: Store) -> int:
         return await one(args, store, executor(client, args.model, store))
 
 
-def welcome_chat(store: Store) -> int:
+def welcome_chat(store: Store, new_session: bool = False) -> int:
     import httpx
 
     defaults = store.defaults()
     args = argparse.Namespace(command="chat", json=False, allow_write=False,
                               max_turns=defaults["max_turns"], timeout=defaults["timeout"],
-                              host=None, mcp=[], agent_edit=None, model=None, allow_exec=False)
+                              host=None, mcp=[], agent_edit=None, model=None, allow_exec=False,
+                              new_session=new_session)
 
     async def run():
         async with httpx.AsyncClient(timeout=60) as client:
@@ -613,7 +742,7 @@ def main(argv=None) -> int:
                     print("  提示：当前 stdin 不是终端；交互输入请直接在真实终端运行 aiverywhere，"
                           "或使用 aiverywhere chat。", flush=True)
                 elif configured or os.getenv("AIVERYWHERE_MODEL") or os.getenv("ANTHROPIC_MODEL"):
-                    return welcome_chat(store)
+                    return welcome_chat(store, getattr(args, "new_session", False))
                 else:
                     print("  aiverywhere › 尚未配置 CLI 模型；运行 aiverywhere setup 后再对话。", flush=True)
             return 0

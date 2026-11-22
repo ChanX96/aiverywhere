@@ -99,7 +99,7 @@ class PermissionTest(unittest.TestCase):
 
         async def lines():
             # Give the pending approval task a chance to settle before feeding
-            # the next command; this is deterministic on Python 3.9 and 3.14.
+            # the next command; this is deterministic on older Python 3.11 and 3.14.
             yield "write something"
             await asyncio.sleep(0.05)
             yield "/approve"

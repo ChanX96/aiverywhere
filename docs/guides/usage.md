@@ -101,7 +101,7 @@ aiverywhere setup --no-input --model "实际模型名" --api-key-env ANTHROPIC_A
 
 ### MCP
 
-裸模型需要使用本地 stdio 服务时，在 Python 3.10+ 的虚拟环境安装可选依赖。源码环境可安装 `.[mcp]` 额外依赖；已经安装的实例直接补齐依赖：
+裸模型需要使用本地 stdio 服务时，在 Python 3.11+ 的虚拟环境安装可选依赖。源码环境可安装 `.[mcp]` 额外依赖；已经安装的实例直接补齐依赖：
 
 ```sh
 ~/.aiverywhere/venv/bin/python -m pip install 'mcp>=1.20,<2'

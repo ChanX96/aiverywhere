@@ -38,6 +38,7 @@
 - 可靠性修复：旧记忆按项目逐条迁移、共享实例按项目 path key 隔离、完整 skill 随源码/归档/wheel 交付、`jq` 缺失时仍可初始化、默认布局 worker 不递归、Shell/Python 共用校验样本。
 - Web 修复导航和运行记录入口，增加 CLI session 历史/恢复展示、Agent bundle 多文件编辑，并明确单项目空间边界。
 - 增加 `bridges/` 插件目录、公共 Bridge 抽象类、manifest 自动发现、CLI/Web 状态展示和安装/卸载多种方式。
+- 最低 Python 版本提升到 3.11，CI 覆盖 3.11 和 3.14。
 - 增加常驻单实例 supervisor、`start/stop/status`、自动 Web、`/api/channels/<id>/messages` 通用入站和回复路由；WeChat/飞书/iMessage 共用 channel envelope。
 - 模型协议增加 OpenAI Chat Completions、Ollama 和 custom OpenAI-compatible；setup 支持 protocol/chat_path。
 - 环境摘要加入 `now`、`timezone` 和 network grant；worker 继承父任务的逐次审批回调。

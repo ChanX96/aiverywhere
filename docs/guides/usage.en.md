@@ -101,7 +101,7 @@ Scheduled and WeChat tasks use these defaults when they do not specify `timeout`
 
 ### MCP
 
-For raw-model tasks that need a local stdio server, install the optional dependency in a Python 3.10+ environment. A source checkout can install the `.[mcp]` extra; an installed instance can add the dependency directly:
+For raw-model tasks that need a local stdio server, install the optional dependency in a Python 3.11+ environment. A source checkout can install the `.[mcp]` extra; an installed instance can add the dependency directly:
 
 ```sh
 ~/.aiverywhere/venv/bin/python -m pip install 'mcp>=1.20,<2'

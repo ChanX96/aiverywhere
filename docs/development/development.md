@@ -58,7 +58,7 @@ tests/shell/memory.sh          纯 Shell 记忆互读验收
 
 - 在 `pyproject.toml` 用 `[build-system]` 声明构建后端，以 `[project.scripts]` 将 `aiverywhere` 指向 `aiverywhere.cli:main`，版本只维护在 `__init__.py`。命令行、模块启动和宿主委派共用一套任务执行逻辑。[PyPA 的 pyproject.toml 指南](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
 - CLI 绑定任务和执行器，skill 指导模型行动，调度器负责唤醒、状态和回执。裸模型客户端按协议执行本地工具回合。存储模块不调用模型。用清楚的函数名和边界类型表达输入输出，错误应保留原因、任务或调用标识。新增抽象要有实际调用方。
-- 仅宿主路径以 POSIX `sh`、`jq`（可选）和普通 JSON 文件为基线，不需要 Python。可选 CLI 以 Python 3.9+、`venv` 和 `python -m pip` 为基线。模型的 HTTP 客户端及可选 MCP 客户端在 `pyproject.toml` 声明。下载可使用[清华 PyPI 镜像](https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple)。
+- 仅宿主路径以 POSIX `sh`、`jq`（可选）和普通 JSON 文件为基线，不需要 Python。可选 CLI 以 Python 3.11+、`venv` 和 `python -m pip` 为基线。模型的 HTTP 客户端及可选 MCP 客户端在 `pyproject.toml` 声明。下载可使用[清华 PyPI 镜像](https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple)。
 - 宿主只安装 skill 时使用项目 `.aiverywhere/`；CLI 通过 `.aiverywhere/instance.json`、项目链接或 `--home` 绑定。记忆写入 `data/memory/<project_key>/`，`state.json` 只保留计划、任务和渠道回执。wheel 包含模板、类型标记和页面资源。密钥和业务数据留在实例目录，打包与 CI 样例仅使用合成数据。
 - 安装和宿主导入只有一条与产品无关的路径：`install.sh` 的仅宿主分支只用 POSIX Shell 复制 bundle、初始化实例并创建 `.agents/skills/aiverywhere` 目录链接；`--cli` 才建 Python 环境并调用 `setup`。旧文件链接可迁移。
 - `config.json` 包含 `model`、`defaults`、`mcpServers`、`wechat`、`session`、`channels`。模型连接参数和运行预算分别归属两个分区；交互配置必须为除模型名和凭据以外的项提供默认值。凭据不得出现在命令输出或测试日志。

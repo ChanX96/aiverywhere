@@ -329,6 +329,7 @@ class Task:
     approval: Callable[[str, dict], Awaitable[bool]] | None = None
     workspace: Path | None = None
     allow_workers: bool = False
+    memory_writable: bool = True
     worker_limit: int = 2
     worker_callback: Callable[[dict], None] | None = None
     activity_callback: Callable[[str], None] | None = None
@@ -346,12 +347,15 @@ class Task:
     answer: str = field(default="", init=False)
     error: str = field(default="", init=False)
     warning: str = field(default="", init=False)
+    memory_state: str = field(default="not_required", init=False)
+    required_memory: list = field(default_factory=list, init=False)
     receipts: list = field(default_factory=list, init=False)
     trace: list = field(default_factory=list, init=False)
     prompt: str = field(default="", init=False)
     run_id: str = field(default="", init=False)
     started: float = field(default=0.0, init=False)
     finished: float = field(default=0.0, init=False)
+    _receipt_start: int = field(default=0, init=False, repr=False)
     history: list = field(default_factory=list, init=False)
     artifacts: dict = field(default_factory=dict, init=False)
     worker_tasks: dict = field(default_factory=dict, init=False)
@@ -360,6 +364,8 @@ class Task:
     timeout: int = field(default=180, init=False)
 
     def __post_init__(self):
+        if self.entry == "worker":
+            self.memory_writable = False
         if self.entry == "dream":
             self.writable, self.exec_allowed, self.agent_edit, self.mcp_servers = False, False, None, ()
             self.allow_workers, self.workspace = False, None
@@ -369,7 +375,9 @@ class Task:
         tools = Tools(self.store, self.id, writable=self.writable, agent_edit=self.agent_edit,
                       read_only=self.entry == "dream", exec_allowed=self.exec_allowed,
                       network_allowed=self.network_allowed,
-                      workspace=self.workspace, allow_workers=self.allow_workers)
+                      workspace=self.workspace, allow_workers=self.allow_workers,
+                      memory_writable=self.memory_writable,
+                      requirements=self.required_memory)
         if self.mcp_servers:
             fields = DISCOVER["input_schema"]["properties"] | {
                 "server": {"type": "string", "enum": list(self.mcp_servers)}}
@@ -380,7 +388,44 @@ class Task:
     def result(self) -> dict:
         return {"task_id": self.id, "status": self.status, "answer": self.answer,
                 "error": self.error, "warning": self.warning, "receipts": list(self.receipts),
-                "agent_revision": self.agent_revision, "compactions": self.compactions, "executor": self.executor_name}
+                "memory_state": self.memory_state,
+                "required_memory": list(self.required_memory),
+                "agent_revision": self.agent_revision, "compactions": self.compactions,
+                "executor": self.executor_name}
+
+    def _finish_memory(self) -> None:
+        """Close required memory items against successful receipts from this run."""
+        requirements = list(self.required_memory)
+        if not requirements:
+            self.memory_state = "not_required"
+            return
+        receipts = self.receipts[self._receipt_start:]
+        remaining = []
+        for item in requirements:
+            found = False
+            for receipt in receipts:
+                if (receipt.get("tool") != "remember" or not receipt.get("ok")
+                        or receipt.get("kind") != item["kind"]
+                        or receipt.get("title") != item["title"]):
+                    continue
+                try:
+                    current = self.store.recall(receipt["entry_id"])
+                    found = (current.get("revision") == receipt.get("revision")
+                             and current.get("title", "").casefold() == item["title"].casefold()
+                             and (not item.get("text") or current.get("text") == item["text"]))
+                except (OSError, ValueError):
+                    found = False
+                if found:
+                    break
+            if not found:
+                remaining.append(item)
+        self.memory_state = "confirmed" if not remaining else "pending"
+        if remaining:
+            detail = "、".join(f"{item['kind']}:{item['title']}" for item in remaining[:3])
+            note = f"必记项未确认：{detail}"
+            self.warning = (self.warning + "；" if self.warning else "") + note
+            if self.status == "completed":
+                self.status = "partial"
 
     def instructions(self, environment: dict) -> str:
         # Read at the request boundary. An in-flight reply keeps its original tools and receipts.
@@ -452,6 +497,8 @@ class Task:
                     receipt["sha256"] = output["sha256"]
                 if name in ("recall", "remember"):
                     receipt.update(entry_id=output["id"], revision=output["revision"])
+                if name == "remember":
+                    receipt.update(kind=output.get("kind"), title=output.get("title"))
                 if name == "revise_agent":
                     receipt["revision"] = output["revision"]
                 if name in remote.selected:
@@ -498,6 +545,9 @@ class Task:
         self.started = time.time()
         self.finished = 0.0
         self.trace = []
+        self.required_memory.clear()
+        self.memory_state = "not_required"
+        self._receipt_start = len(self.receipts)
         messages = [*self.history, {"role": "user", "content": prompt}]
         try:
             if callable(provider):
@@ -539,6 +589,8 @@ class Task:
             self.status = "failed"
             self.error = str(exc) or type(exc).__name__
         finally:
+            if self.status in {"completed", "failed", "cancelled"}:
+                self._finish_memory()
             self.finished = time.time()
             detail = {
                 "entry": self.entry,
@@ -552,6 +604,8 @@ class Task:
                 "answer": self.answer[:64000],
                 "error": self.error[:8000],
                 "warning": self.warning[:4000],
+                "memory_state": self.memory_state,
+                "required_memory": self.required_memory,
                 "trace": self.trace[:100],
                 "receipts": self.receipts[-100:],
             }

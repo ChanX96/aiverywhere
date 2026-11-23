@@ -37,8 +37,11 @@ instance=${resolved#*|}
 has_jq || fail "jq is required for write-memory.sh" 3
 key=$(project_key "$instance" "$project")
 directory=$(memory_dir "$instance" "$key")
-mkdir -p "$directory"
-chmod 700 "$instance/data" "$instance/data/memory" "$directory"
+if [ ! -d "$directory" ]; then
+    mkdir -p "$directory" || fail "无法创建记忆目录；请检查实例目录权限" 3
+    chmod 700 "$instance/data" "$instance/data/memory" "$directory" ||
+        fail "无法设置记忆目录权限" 3
+fi
 
 if [ -n "$ident" ] && ! valid_id "$ident"; then
   fail "id must be 32 lowercase hex characters" 2
@@ -61,7 +64,12 @@ fi
 valid_id "$ident" || fail "generated id is invalid" 5
 
 lock="$directory/.lock"
-mkdir "$lock" 2>/dev/null || fail "memory is locked; retry later" 6
+if ! mkdir "$lock" 2>/dev/null; then
+    if [ -e "$lock" ]; then
+        fail "memory is locked; retry later" 6
+    fi
+    fail "memory directory is not writable (permission or read-only)" 3
+fi
 cleanup() { rmdir "$lock" 2>/dev/null || true; }
 trap cleanup EXIT HUP INT TERM
 

@@ -76,9 +76,15 @@ NATIVE = [
          {"url": TEXT}, ("url",)),
     DELEGATE,
     ACCEPT,
-    tool("remember", "保存一条持久事实、可复用技能或待处理线索 / save fact, skill or clue. 纠正旧条目时传 revision。",
+    tool("read_skill", "按需读取一个 workflow 模块；共享实例和项目覆盖均可读取 / load one workflow module on demand",
+         {"module": {"type": "string", "enum": ["plan", "recall", "execute", "extract", "finish"]}},
+         ("module",)),
+    tool("require_memory", "登记本次任务的必记项；用户明确要求保存、设定默认或纠正记忆时，在写入前调用 / register a required memory item",
+         {"kind": {"type": "string", "enum": ["fact", "skill", "clue"]}, "title": TEXT,
+          "text": TEXT, "reason": TEXT}, ("kind", "title")),
+    tool("remember", "保存一条持久事实、可复用技能或待处理线索 / save fact, skill or clue. 纠正旧条目时传 id 和现行 revision。",
          {"kind": {"type": "string", "enum": ["fact", "skill", "clue"]}, "title": TEXT, "text": TEXT,
-          "revision": INTEGER}, ("kind", "title", "text")),
+          "id": TEXT, "revision": INTEGER}, ("kind", "title", "text")),
     tool("recall", "按 ID 展开已找到的记忆、技能或线索 / read memory, skill or clue",
          {"id": TEXT}, ("id",)),
     tool("clue_done", "标记一条已处理完的 Dream 线索 / resolve a reviewed clue",
@@ -119,10 +125,13 @@ class Tools:
     def __init__(self, store: Store, task_id: str, *, writable: bool = False,
                  agent_edit: str | None = None, read_only: bool = False,
                  exec_allowed: bool = False, network_allowed: bool = True,
-                 workspace: Path | None = None, allow_workers: bool = False):
+                 workspace: Path | None = None, allow_workers: bool = False,
+                 memory_writable: bool = True, requirements: list | None = None):
         self.store = store
         self.task_id = task_id
         self.agent_edit = agent_edit
+        self.memory_writable = memory_writable
+        self.requirements = requirements if requirements is not None else []
         self.skill_revisions = {}
         self.workspace = (workspace or store.project).resolve()
         self.sandbox = self.workspace if self.workspace != store.project.resolve() else None
@@ -152,7 +161,10 @@ class Tools:
                 self.available["accept_artifact"] = ACCEPT
         if not agent_edit:
             self.available.pop("revise_agent", None)
-        direct = {"read_file", "list_files", "search_files", "recall", "remember", "write_file",
+        if not self.memory_writable:
+            for name in ("read_skill", "require_memory", "remember", "clue_done", "share_skill", "used_skill"):
+                self.available.pop(name, None)
+        direct = {"read_file", "list_files", "search_files", "recall", "read_skill", "require_memory", "remember", "write_file",
                   "edit_file", "run_command", "web_search", "web_fetch", "revise_agent"}
         if allow_workers:
             direct.add("delegate")
@@ -161,6 +173,10 @@ class Tools:
         if read_only:
             direct.add("clue_done")
         self.active = {"discover": DISCOVER} | {n: s for n, s in self.available.items() if n in direct}
+
+    def _fixed_finish(self, path: Path) -> bool:
+        fixed = (self.store.skill_dir / "references/workflow/finish.md").resolve()
+        return path == fixed
 
     def path(self, value: str) -> Path:
         root = self.workspace
@@ -214,6 +230,8 @@ class Tools:
             raise ValueError("写入内容超过 1 MiB")
         with self.store.locked():
             dest = self.path(path)
+            if self._fixed_finish(dest):
+                raise PermissionError("finish 是固定模块，不能修改")
             if dest in (self.store.agent_file, self.store.home / "skills/aiverywhere/SKILL.md",
                         self.store.home / ".project/SKILL.md", skill_template()):
                 raise PermissionError("修订 agent 文件需通过单独授权的 revise_agent 或 skill --update")
@@ -268,6 +286,8 @@ class Tools:
         if len(new.encode()) > 1_048_576:
             raise ValueError("替换内容超过 1 MiB")
         target = self.path(path)
+        if self._fixed_finish(target):
+            raise PermissionError("finish 是固定模块，不能修改")
         if not target.is_file():
             raise ValueError("请选择一个普通文件")
         raw = target.read_bytes()
@@ -300,7 +320,10 @@ class Tools:
         command = list(argv)
         if self.sandbox:
             from ..platform.sandbox import wrap
-            command = wrap(self.sandbox, command, deny=(self.store.data,))
+            denied = {self.store.data.resolve(), self.store.config_path.resolve(),
+                      self.store.skill_dir.resolve(),
+                      (self.store.home / "overrides").resolve()}
+            command = wrap(self.sandbox, command, deny=tuple(path for path in denied if path.exists()))
         try:
             process = subprocess.Popen(command, cwd=directory, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        start_new_session=True)
@@ -467,8 +490,32 @@ class Tools:
         if name not in self.active:
             raise PermissionError("工具尚未发现或未获授权，请先调用 discover")
         validate_arguments(self.active[name], values)
+        if name in {"require_memory", "remember", "clue_done", "share_skill", "used_skill"} and not self.memory_writable:
+            raise PermissionError("worker 不能直接写共享记忆，请交回候选记忆给主任务")
+        if name == "read_skill":
+            from . import workflow
+            loaded = workflow.load_module(self.store, values["module"])
+            return {"name": loaded["name"], "source": loaded["source"],
+                    "contract": loaded["contract"], "text": loaded["text"],
+                    "ignored_override": loaded.get("ignored_override")}
+        if name == "require_memory":
+            title = values["title"].strip()
+            if not title or len(title) > 160:
+                raise ValueError("必记项标题需要 1–160 个字符")
+            item = {"kind": values["kind"], "title": title,
+                    "text": values.get("text", "")[:8000],
+                    "reason": values.get("reason", "")[:500]}
+            self.requirements.append(item)
+            return item | {"required": True}
         if name == "remember":
-            return self.store.remember(source=self.task_id, **values)
+            item_id = values.pop("id", None)
+            if item_id is None:
+                return self.store.remember(source=self.task_id, **values)
+            revision = values.pop("revision", None)
+            if revision is None:
+                raise ValueError("纠正已有记忆需要现行 revision")
+            return self.store.update(item_id, values["title"], values["text"],
+                                     values["kind"], self.task_id, revision)
         if name == "clue_done":
             return self.store.forget_clue(values["id"])
         if name == "compact_context":

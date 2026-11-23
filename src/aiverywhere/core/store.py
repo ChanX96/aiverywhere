@@ -408,6 +408,8 @@ class Store:
                 relative.startswith("references/") and path.suffix in {".md", ".json"}
                 or relative.startswith("scripts/") and path.suffix == ".sh"):
             raise ValueError("只允许编辑 SKILL.md、references/*.md/json 和 scripts/*.sh")
+        if relative == "references/workflow/finish.md":
+            raise PermissionError("finish 是固定模块，不能修改")
         return path
 
     def read_agent_file(self, relative: str) -> dict:

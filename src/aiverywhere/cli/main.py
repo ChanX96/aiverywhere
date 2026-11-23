@@ -90,6 +90,12 @@ def parser() -> argparse.ArgumentParser:
     publication.add_argument("--update", metavar="REV", type=revision, help="从标准输入发布完整文件，核对旧修订")
     sub.add_parser("env", help="只读查看本地运行环境、已授权范围和未验证能力")
     sub.add_parser("bridges", help="列出项目/实例中的 bridge 插件和健康状态")
+    workflow = sub.add_parser("workflow", help="查看按需加载的 workflow 模块和项目覆盖")
+    workflow_ops = workflow.add_subparsers(dest="op", required=True)
+    workflow_ops.add_parser("list", help="列出模块来源和契约兼容性")
+    workflow_ops.add_parser("path", help="输出默认模块与覆盖目录")
+    show_workflow = workflow_ops.add_parser("show", help="读取实际生效的模块正文")
+    show_workflow.add_argument("module", choices=("plan", "recall", "execute", "extract", "finish"))
     start = sub.add_parser("start", help="启动常驻 supervisor 和 Web")
     start.add_argument("--port", type=int, choices=range(0, 65536), metavar="0-65535")
     sub.add_parser("stop", help="停止常驻 supervisor")
@@ -125,6 +131,7 @@ def parser() -> argparse.ArgumentParser:
     put = ops.add_parser("put", help="保存条目；更新时提供现行修订号")
     put.add_argument("title")
     put.add_argument("text")
+    put.add_argument("--id", dest="item_id", help="纠正已有条目的稳定 ID")
     put.add_argument("--revision", type=positive)
     search = ops.add_parser("search", help="按线索查摘要；省略 query 可列当前种类")
     search.add_argument("query", nargs="?", default="")
@@ -166,7 +173,8 @@ def parser() -> argparse.ArgumentParser:
 
 def memory(args, store: Store):
     if args.op == "put":
-        return store.remember(args.title, args.text, args.kind, "user", revision=args.revision)
+        return store.save_entry({}, args.title, args.text, args.kind, "user",
+                                revision=args.revision, item_id=args.item_id)
     if args.op == "search":
         return store.search(args.query, args.kind, cold=args.cold, limit=20 if args.kind == "clue" else 5)
     if args.op == "get":
@@ -446,7 +454,7 @@ async def chat(args, store: Store, provider) -> int:
             raise
         finally:
             try:
-                if candidate.status == "completed":
+                if candidate.status in {"completed", "partial"}:
                     new_messages = candidate.history[history_before:]
                     session.finish_turn(turn_id, new_messages, candidate.answer,
                                         candidate.status)
@@ -794,7 +802,7 @@ async def one(args, store: Store, provider: Messages | Native) -> int:
                     raise ValueError("同一 task-id 已绑定到其他请求")
                 result = previous["result"]
                 output(result, args.json)
-                return 0 if result["status"] in {"running", "completed"} else 1
+                return 0 if result["status"] in {"running", "completed", "partial"} else 1
             task.status = "running"
             jobs[key] = {"project": str(store.project), "signature": signature, "result": task.result(),
                          "pid": os.getpid(), "expires": time.time() + args.timeout + 30}
@@ -846,7 +854,7 @@ async def one(args, store: Store, provider: Messages | Native) -> int:
     if streamed and not args.json:
         result = result | {"answer": ""}
     output(result, args.json)
-    return 0 if task.status == "completed" else 1
+    return 0 if task.status in {"completed", "partial"} else 1
 
 
 async def invoke(args, store: Store) -> int:
@@ -915,6 +923,15 @@ def main(argv=None) -> int:
         if args.command == "bridges":
             from ..integrations.bridges.registry import discover
             print_json(discover(store, check_health=True))
+            return 0
+        if args.command == "workflow":
+            from ..core import workflow
+            if args.op == "list":
+                print_json(workflow.list_modules(store))
+            elif args.op == "path":
+                print_json(workflow.paths(store))
+            else:
+                print_json(workflow.load_module(store, args.module))
             return 0
         if args.command in {"start", "stop", "status"}:
             from ..core import supervisor

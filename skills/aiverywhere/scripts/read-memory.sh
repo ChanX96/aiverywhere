@@ -6,15 +6,18 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 # shellcheck disable=SC1091
 . "$script_dir/common.sh"
 
-ident=${1:-}
+ident=''
 project=${PWD}
 home=${AIVERYWHERE_HOME:-}
-shift || true
 while [ $# -gt 0 ]; do
   case $1 in
     --project) project=${2:?missing project}; shift 2 ;;
     --home) home=${2:?missing home}; shift 2 ;;
-    *) fail "unknown argument: $1" 2 ;;
+    *)
+      [ -z "$ident" ] || fail "unexpected argument: $1" 2
+      ident=$1
+      shift
+      ;;
   esac
 done
 [ -n "$ident" ] || fail "usage: read-memory.sh <id> [--project DIR] [--home DIR]" 2

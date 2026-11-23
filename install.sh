@@ -241,6 +241,7 @@ if [ "$WITH_CLI" = "no" ]; then
         if [ -n "$preserved" ]; then
             cp "$preserved" "$target/SKILL.md"
             rm -f "$preserved"
+            note "保留现有 SKILL.md；新版入口规则在 ${skill_source}/SKILL.md，请合并后再使用"
         fi
         run chmod +x "$target/scripts/"*.sh || fail "无法设置脚本权限"
     fi
@@ -256,7 +257,11 @@ if [ "$WITH_CLI" = "no" ]; then
     note ""
     note "aiverywhere 宿主安装完成；未安装 Python 或 CLI"
     note "  实例：  $HOME_DIR"
-    note "  技能：  ${PROJECT_DIR}/.agents/skills/aiverywhere"
+    if [ "$LINK" = "yes" ]; then
+        note "  技能：  ${PROJECT_DIR}/.agents/skills/aiverywhere"
+    else
+        note "  技能：  $HOME_DIR/skills/aiverywhere（未创建项目链接）"
+    fi
     note "  记忆：  $HOME_DIR/data/memory/"
     note ""
     note "宿主读取技能目录即可工作；需要 CLI 时重新运行并加 --cli。"
@@ -304,6 +309,7 @@ if [ -f "$skill_source/SKILL.md" ]; then
         if [ -n "$preserved" ]; then
             cp "$preserved" "$target/SKILL.md"
             rm -f "$preserved"
+            note "保留现有 SKILL.md；新版入口规则在 ${skill_source}/SKILL.md，请合并后再使用"
         fi
         run chmod +x "$target/scripts/"*.sh || fail "无法设置脚本权限"
     fi
@@ -396,6 +402,8 @@ else
 fi
 if [ "$LINK" = "yes" ]; then
     note "  项目链接：$PROJECT_DIR/.agents/skills/aiverywhere"
+else
+    note "  项目链接：未创建（--no-link）"
 fi
 if [ "$WITH_CLI" = "yes" ]; then
     note "  命令：    $BIN_DIR/aiverywhere"

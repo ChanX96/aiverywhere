@@ -114,8 +114,9 @@ async def delegate(parent: Task, tasks: list[str], provider) -> dict:
                           workspace=workspace, entry="worker", allow_workers=False,
                           memory_writable=False)
             if parent.worker_callback:
-                worker.activity_callback = lambda action: parent.worker_callback({
-                    "id": ident, "status": "running", "action": action, "description": description})
+                worker.activity_callback = lambda event: parent.worker_callback({
+                    "id": ident, "status": "running", "action": event.get("label", ""),
+                    "description": description})
             handle = asyncio.current_task()
             parent.worker_tasks[ident] = handle
             if parent.worker_callback:

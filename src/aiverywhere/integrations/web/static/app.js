@@ -313,10 +313,54 @@ function richAnswer(value) {
   return renderMarkdown(value);
 }
 
-function thinkingHtml(value, live = false) {
+function thinkingHtml(value, key) {
   if (!value) return "";
-  return `<details class="reasoning"${live ? " open" : ""}><summary>思考过程 <small>模型返回的推理文本</small></summary>` +
+  return `<details class="reasoning" data-key="${key}">` +
+    `<summary>思考过程 <small>模型返回的推理文本</small></summary>` +
     `<div class="reasoning-body">${renderMarkdown(value)}</div></details>`;
+}
+
+const activityNames = {tool: "工具", skill: "Skill", mcp: "MCP", worker: "Worker"};
+const activityStates = {running: "运行中", ok: "完成", error: "失败", cancelled: "已取消"};
+
+function activityHtml(item, key) {
+  const label = item.label || item.name || "调用";
+  const kind = activityNames[item.kind] || "工具";
+  const state = activityStates[item.status] || item.status || "";
+  const duration = Number.isFinite(Number(item.duration)) && item.duration != null
+    ? ` · ${Number(item.duration).toFixed(2)}s` : "";
+  const input = item.input ? `<pre>${esc(item.input)}</pre>` : "";
+  const output = item.output ? `<pre>${esc(item.output)}</pre>` : "";
+  const error = item.error ? `<p class="activity-error">${esc(item.error)}</p>` : "";
+  return `<details class="activity ${esc(item.status || "")}" data-key="${key}">` +
+    `<summary><span class="activity-kind">${kind}</span><b>${esc(label)}</b>` +
+    `<span class="activity-state">${esc(state)}${duration}</span></summary>` +
+    `<div class="activity-body">${error}${input}${output}</div></details>`;
+}
+
+function todosHtml(todos, key) {
+  if (!todos?.length) return "";
+  const completed = todos.filter(item => item.status === "completed").length;
+  const rows = todos.map(item => {
+    const mark = item.status === "completed" ? "[x]" : item.status === "in_progress" ? "[>]" : "[ ]";
+    return `<li class="${esc(item.status || "pending")}"><span>${mark}</span>${esc(item.text)}</li>`;
+  }).join("");
+  return `<details class="todo-panel" data-key="${key}" open>` +
+    `<summary>任务清单 <small>${completed}/${todos.length} 完成</small></summary>` +
+    `<ul>${rows}</ul></details>`;
+}
+
+function processHtml(message, index) {
+  const activities = Array.isArray(message.activities) ? message.activities : [];
+  const todos = Array.isArray(message.todos) ? message.todos : [];
+  const thinking = thinkingHtml(message.thinking || "", `${index}-thinking`);
+  const rows = activities.map((item, position) =>
+    activityHtml(item, `${index}-activity-${position}`)).join("");
+  const process = `${thinking}${rows}`;
+  const summary = `过程${activities.length ? ` · ${activities.length} 次调用` : ""}${thinking ? " · 思考" : ""}`;
+  return `${todosHtml(todos, `${index}-todos`)}` +
+    (process ? `<details class="process" data-key="${index}-process"><summary>${summary}</summary>` +
+      `<div class="process-body">${process}</div></details>` : "");
 }
 
 function chatEmpty() {
@@ -335,7 +379,7 @@ function chatEmpty() {
 
 function chatThread() {
   if (!chat.messages.length) return chatEmpty();
-  return chat.messages.map(message => {
+  return chat.messages.map((message, index) => {
     if (message.role === "system") {
       return `<div class="message system"><div class="bubble">${esc(message.text)}</div></div>`;
     }
@@ -343,19 +387,17 @@ function chatThread() {
       return `<div class="message user"><div class="avatar">你</div><div class="bubble">${esc(message.text)}</div></div>`;
     }
     if (message.pending) {
-      const reasoning = thinkingHtml(message.thinking || "", true);
       const streamed = message.text
         ? `<div class="stream-answer">${richAnswer(message.text)}<span class="stream-cursor"></span></div>`
         : `<div class="thinking"><i></i><i></i><i></i><span>处理中 · ${chatElapsed()}s</span></div>`;
       return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">
-        ${reasoning}${streamed}
+        ${processHtml(message, index)}${streamed}
         <p class="faint">本地模型正在选择工具并核实结果</p></div></div>`;
     }
-    const reasoning = thinkingHtml(message.thinking || "", true);
     const body = message.error
       ? `<span class="error">${esc(message.error)}</span>`
       : richAnswer(message.text || "（空答复）");
-    return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">${reasoning}${body}${chatReceipts(message.receipts)}</div></div>`;
+    return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">${processHtml(message, index)}${body}${chatReceipts(message.receipts)}</div></div>`;
   }).join("");
 }
 
@@ -415,7 +457,12 @@ function paintChat() {
   const stream = $("#chat-stream");
   if (!stream) return;
   const stick = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 90;
+  const details = new Map([...stream.querySelectorAll("details[data-key]")].map(item =>
+    [item.dataset.key, item.open]));
   stream.innerHTML = chatThread();
+  stream.querySelectorAll("details[data-key]").forEach(item => {
+    if (details.has(item.dataset.key)) item.open = details.get(item.dataset.key);
+  });
   const receipts = $("#chat-receipts");
   if (receipts) receipts.innerHTML = chat.receipts.length
     ? chat.receipts.map(item => `<span class="receipt ${item.ok === false ? "err" : ""}" title="${esc(item.error || item.tool || "tool")}">${esc([item.tool, item.path].filter(Boolean).join(" · ") || "tool")}</span>`).join("")
@@ -473,6 +520,8 @@ async function pollChat() {
     const assistant = chat.messages[chat.messages.length - 1];
     if (assistant?.role === "assistant" && assistant.pending) {
       assistant.thinking = state.thinking || assistant.thinking || "";
+      assistant.activities = Array.isArray(state.activities) ? state.activities : assistant.activities;
+      assistant.todos = Array.isArray(state.todos) ? state.todos : assistant.todos;
       if (state.status === "running") {
         assistant.streamTarget = state.stream_text || assistant.streamTarget || "";
         assistant.streamDone = false;
@@ -591,7 +640,8 @@ async function sendChat() {
   hideSlash();
   chat.messages.push({role: "user", text: message});
   chat.messages.push({role: "assistant", pending: true, text: "", thinking: "",
-    streamTarget: "", streamDone: false, streamTimer: null, error: "", receipts: []});
+    activities: [], todos: [], streamTarget: "", streamDone: false, streamTimer: null,
+    error: "", receipts: []});
   chat.running = true;
   chat.started = Date.now();
   chat.receipts = [];

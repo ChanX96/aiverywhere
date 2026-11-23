@@ -1004,6 +1004,68 @@ textarea { resize: vertical; }
   animation: blink 1s steps(2, start) infinite;
 }
 @keyframes blink { 50% { opacity: 0; } }
+.process, .todo-panel {
+  margin: 0 0 10px;
+  border: 1px solid #263238;
+  border-radius: 5px;
+  background: #0c1418;
+}
+.process > summary, .todo-panel > summary {
+  cursor: pointer;
+  padding: 7px 10px;
+  color: #8f9ba1;
+  font: .76rem/1.4 var(--mono);
+  user-select: none;
+}
+.process > summary:hover, .todo-panel > summary:hover { color: #c0cecb; }
+.process-body { padding: 0 8px 8px; }
+.todo-panel ul { margin: 0; padding: 2px 12px 10px 30px; color: #aab7bb; }
+.todo-panel li { margin: 4px 0; font-size: .84rem; }
+.todo-panel li span { display: inline-block; width: 28px; color: #77878d; font: .72rem var(--mono); }
+.todo-panel li.completed { color: #8b999d; text-decoration: line-through; text-decoration-color: #516066; }
+.todo-panel li.in_progress { color: #d0c29a; }
+.activity {
+  border-top: 1px solid #1d282d;
+  margin: 0;
+}
+.activity:first-child { border-top: 0; }
+.activity > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 4px;
+  cursor: pointer;
+  color: #aebcc0;
+  font-size: .78rem;
+  list-style: none;
+}
+.activity > summary::-webkit-details-marker { display: none; }
+.activity > summary:before { content: "›"; color: #63757c; width: 10px; }
+.activity[open] > summary:before { content: "⌄"; }
+.activity-kind {
+  min-width: 40px;
+  color: #7f9397;
+  font: .66rem var(--mono);
+  text-transform: uppercase;
+}
+.activity summary b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-state { margin-left: auto; color: #74868b; font: .66rem var(--mono); }
+.activity.error > summary .activity-state { color: #dd9996; }
+.activity.running > summary .activity-state { color: #d6bd81; }
+.activity-body { padding: 2px 10px 9px 22px; }
+.activity-body pre {
+  margin: 4px 0;
+  max-height: 180px;
+  padding: 7px 8px;
+  border: 1px solid #1e2b31;
+  border-radius: 4px;
+  background: #091116;
+  color: #8fa3a6;
+  font: .7rem/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+.activity-error { margin: 4px 0; color: #d99a97; font-size: .76rem; }
+
 .reasoning {
   border: 1px solid #2a363b;
   border-radius: 5px;

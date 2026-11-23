@@ -46,7 +46,7 @@ class ChatSessions:
                           "writable": writable, "exec": exec_allowed,
                           "network": network_allowed,
                           "thread": None, "started": 0.0, "finished": None,
-                          "stream_text": "", "thinking": ""}
+                          "stream_text": "", "thinking": "", "activities": []}
                 self.records[session] = record
                 new = True
             thread = threading.Thread(target=self._run, args=(record, message, limits), daemon=True)
@@ -55,6 +55,7 @@ class ChatSessions:
             record["finished"] = None
             record["stream_text"] = ""
             record["thinking"] = ""
+            record["activities"] = []
             thread.start()
             return {"session": session, "task_id": record["task"].id, "status": "running",
                     "started": record["started"], "writable": writable,
@@ -72,6 +73,14 @@ class ChatSessions:
             async def run():
                 import httpx
                 async with httpx.AsyncClient(timeout=60) as client:
+                    def activity(event):
+                        with self.lock:
+                            current = [item for item in record["activities"]
+                                       if item.get("id") != event.get("id")]
+                            current.append(event)
+                            record["activities"] = current[-200:]
+
+                    task.activity_callback = activity
                     await task.run(message, executor(client, None, self.store),
                                    max_turns=limits["max_turns"], timeout=limits["timeout"],
                                    on_text=lambda delta: append("stream_text", delta),
@@ -100,6 +109,7 @@ class ChatSessions:
                           network_allowed=record["network"],
                           stream_text=record.get("stream_text", ""),
                           thinking=record.get("thinking", ""),
+                          activities=[dict(item) for item in record.get("activities", [])],
                           streaming=bool(record["thread"] and record["thread"].is_alive()
                                          and result["status"] == "running"),
                           elapsed=max(0.0, (record["finished"] or time.time()) - record["started"]))

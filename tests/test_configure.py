@@ -101,7 +101,7 @@ class Configure(unittest.TestCase):
     def test_cli_exposes_slash_command_menu(self):
         from aiverywhere.cli.main import SLASH_COMMANDS, _slash_matches
         commands = {command for command, _ in SLASH_COMMANDS}
-        self.assertEqual(commands, {"/help", "/new", "/resume", "/rename", "/sessions", "/status", "/compact", "/permissions", "/grant", "/revoke", "/approve", "/deny", "/jobs", "/cancel", "/ask", "/quit"})
+        self.assertEqual(commands, {"/help", "/new", "/resume", "/rename", "/sessions", "/status", "/todos", "/compact", "/permissions", "/grant", "/revoke", "/approve", "/deny", "/jobs", "/cancel", "/ask", "/quit"})
         self.assertEqual({command for command, _ in _slash_matches("/")}, commands)
         self.assertEqual([command for command, _ in _slash_matches("/he")], ["/help"])
 
@@ -188,7 +188,7 @@ class CommandLine(unittest.TestCase):
     def test_setup_and_link_share_the_same_instance(self):
         version = self.cli("--version")
         self.assertEqual(version.returncode, 0, version.stderr)
-        self.assertIn("aiverywhere 0.3.1", version.stdout)
+        self.assertIn("aiverywhere 0.4.0", version.stdout)
         setup = self.cli("setup", "--no-input", "--model", "demo", "--base-url", "http://127.0.0.1:9000",
                          "--api-key", "secret", "--max-turns", "3", "--port", "0")
         self.assertEqual(setup.returncode, 0, setup.stderr)

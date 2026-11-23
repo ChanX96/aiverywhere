@@ -226,7 +226,7 @@ Web 对话提供安全子集的 `/` 命令菜单：导航、状态、新会话�
 
 
 
-Web 是 supervisor 托管的单项目控制面。对话回答支持 Markdown/代码块、可折叠的模型思考文本和增量流式显示；思考块不写回模型上下文。对话 session 仍是 Web 进程内的临时上下文；CLI session 是追加式 JSONL 持久会话，Web 的“会话与任务”页只读取并展示这些 session 和恢复命令，避免两个进程同时写同一会话。一个 Web 绑定一个项目实例，不提供任意路径切换；切换项目使用目标项目的 `.aiverywhere/` 或用户级实例启动另一个 supervisor。
+Web 是 supervisor 托管的单项目控制面。对话回答支持 Markdown/代码块、可折叠的模型思考文本、工具/Skill/MCP 调用过程和增量流式显示；大任务有 todo/checklist 与完成状态；思考块和活动摘要不写回模型上下文。对话 session 仍是 Web 进程内的临时上下文；CLI session 是追加式 JSONL 持久会话，Web 的“会话与任务”页只读取并展示这些 session 和恢复命令，避免两个进程同时写同一会话。一个 Web 绑定一个项目实例，不提供任意路径切换；切换项目使用目标项目的 `.aiverywhere/` 或用户级实例启动另一个 supervisor。
 
 Agent 页面编辑完整 bundle：`SKILL.md`、`references/*.md|json`、`scripts/*.sh`。主文件沿用活动版本修订；其他文件使用内容哈希做并发检查，路径和扩展名在服务端限制。日志页按 task 展示，概览和运行记录提供入口。
 

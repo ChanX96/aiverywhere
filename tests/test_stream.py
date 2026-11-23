@@ -149,6 +149,10 @@ class WebChatStreamTest(unittest.TestCase):
         class Provider:
             async def agentloop(self, task, environment, messages, prompt, max_turns,
                                 checkpoint, on_text=None, on_thinking=None, **kwargs):
+                remote = type("Remote", (), {"selected": {}})()
+                await task._tool_result(
+                    {"id": "t1", "name": "todo", "input": {"action": "set", "items": ["分析"]}},
+                    remote)
                 on_thinking("先分析，")
                 on_thinking("再回答。")
                 on_text("流式")
@@ -181,3 +185,6 @@ class WebChatStreamTest(unittest.TestCase):
             self.assertEqual(state["status"], "completed")
             self.assertEqual(state["answer"], "流式回答")
             self.assertEqual(state["thinking"], "先分析，再回答。")
+            sessions.records["web-stream-12345678"]["thread"].join(2)
+            self.assertEqual(state["todos"][0]["text"], "分析")
+            self.assertEqual(state["activities"][0]["label"], "todo")

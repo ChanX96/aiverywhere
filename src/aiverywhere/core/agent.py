@@ -350,7 +350,7 @@ class Task:
     memory_writable: bool = True
     worker_limit: int = 2
     worker_callback: Callable[[dict], None] | None = None
-    activity_callback: Callable[[str], None] | None = None
+    activity_callback: Callable[[dict], None] | None = None
     id: str = field(default_factory=lambda: uuid4().hex)
     entry: str = "run"
     host: str | None = None
@@ -370,6 +370,8 @@ class Task:
     required_memory: list = field(default_factory=list, init=False)
     receipts: list = field(default_factory=list, init=False)
     trace: list = field(default_factory=list, init=False)
+    activities: list = field(default_factory=list, init=False)
+    todos: list = field(default_factory=list, init=False)
     prompt: str = field(default="", init=False)
     run_id: str = field(default="", init=False)
     started: float = field(default=0.0, init=False)
@@ -396,7 +398,7 @@ class Task:
                       network_allowed=self.network_allowed,
                       workspace=self.workspace, allow_workers=self.allow_workers,
                       memory_writable=self.memory_writable,
-                      requirements=self.required_memory)
+                      requirements=self.required_memory, todos=self.todos)
         if self.mcp_servers:
             fields = DISCOVER["input_schema"]["properties"] | {
                 "server": {"type": "string", "enum": list(self.mcp_servers)}}
@@ -409,6 +411,8 @@ class Task:
                 "error": self.error, "warning": self.warning, "receipts": list(self.receipts),
                 "memory_state": self.memory_state,
                 "required_memory": list(self.required_memory),
+                "todos": [dict(item) for item in self.todos],
+                "activities": [dict(item) for item in self.activities],
                 "agent_revision": self.agent_revision, "compactions": self.compactions,
                 "executor": self.executor_name}
 
@@ -464,16 +468,55 @@ class Task:
         except (TypeError, ValueError):
             return str(value)[:limit]
 
+    def _emit_activity(self, event: dict) -> None:
+        if self.activity_callback is None:
+            return
+        try:
+            self.activity_callback(dict(event))
+        except Exception:
+            # Observability must never break the task kernel.
+            return
+
+    def _activity_meta(self, name: str, values: dict, remote: RemoteTools) -> tuple[str, str]:
+        if name == "discover" and "server" in values:
+            return "mcp", f"mcp:{values.get('server', '')}"
+        if name in remote.selected:
+            server, tool = remote.selected[name][:2]
+            return "mcp", f"{server}.{tool}"
+        if name in {"read_skill", "revise_agent"}:
+            label = (f"skill:{values.get('module', '')}" if name == "read_skill"
+                     else "skill:SKILL.md")
+            return "skill", label
+        if name == "delegate":
+            tasks = values.get("tasks") or []
+            return "worker", f"workers:{len(tasks) if isinstance(tasks, list) else 0}"
+        return "tool", name
+
     async def _tool_result(self, call: dict, remote: RemoteTools) -> dict:
         name, values = call["name"], call["input"]
-        if self.activity_callback:
-            self.activity_callback(name)
         discovery = name == "discover" and "server" in values
         external = discovery or name in remote.selected
+        started = time.time()
+        kind, label = self._activity_meta(name, values, remote)
+        activity = {"id": call["id"], "kind": kind, "name": name, "label": label,
+                    "status": "running", "started": started,
+                    "input": self._clip(values, 1200)}
+        self.activities.append(activity)
+        if len(self.activities) > 200:
+            self.activities.pop(0)
+        self._emit_activity(activity)
+
+        def finish_activity(status: str, *,
+                            output: str = "", error: str = "") -> None:
+            activity.update(status=status, finished=time.time(),
+                            duration=round(max(0.0, time.time() - started), 3),
+                            output=self._clip(output, 2000), error=error[:1000])
+            self._emit_activity(activity)
 
         async def execute():
             receipt = {"id": call["id"], "tool": name}
-            trace = {"tool": name, "input": self._clip(values, 4000)}
+            trace = {"tool": name, "kind": kind, "label": label,
+                     "input": self._clip(values, 4000)}
             try:
                 if self.approval is not None and name in APPROVAL_TOOLS:
                     if not await self.approval(name, values):
@@ -527,17 +570,21 @@ class Task:
                 self.receipts.append(receipt | {"ok": False, "state": "result_unknown"})
                 trace.update(ok=False, error="cancelled", output="")
                 self.trace.append(trace)
+                finish_activity("cancelled", error="cancelled")
                 raise
             except Exception as exc:
                 receipt["ok"] = False
                 content = str(exc)[:500] or type(exc).__name__
                 trace.update(ok=False, error=content, output="")
+                finish_activity("error", error=content)
             else:
                 trace.update(ok=True, output=self._clip(content, 8000))
+                finish_activity("ok", output=content)
             if "error" not in trace:
                 pass
             if not trace.get("ok"):
                 trace.setdefault("output", "")
+            trace.update(status=activity["status"], duration=activity["duration"])
             self.receipts.append(receipt)
             if trace not in self.trace:
                 self.trace.append(trace)
@@ -564,6 +611,7 @@ class Task:
         self.started = time.time()
         self.finished = 0.0
         self.trace = []
+        self.activities.clear()
         self.required_memory.clear()
         self.memory_state = "not_required"
         self._receipt_start = len(self.receipts)
@@ -630,6 +678,8 @@ class Task:
                 "warning": self.warning[:4000],
                 "memory_state": self.memory_state,
                 "required_memory": self.required_memory,
+                "todos": self.todos,
+                "activities": self.activities[-200:],
                 "trace": self.trace[:100],
                 "receipts": self.receipts[-100:],
             }

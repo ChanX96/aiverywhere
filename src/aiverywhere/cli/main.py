@@ -271,7 +271,8 @@ SLASH_COMMANDS = (
     ("/resume", "恢复指定 session：/resume <id>"),
     ("/rename", "重命名当前 session：/rename <name>"),
     ("/sessions", "列出当前项目的 session"),
-    ("/status", "当前 session 和上下文预算"),
+    ("/status", "当前 session、上下文预算和待办"),
+    ("/todos", "查看当前任务清单与完成情况"),
     ("/compact", "手动压实当前上下文"),
     ("/permissions", "查看本次 session 的授权"),
     ("/grant", "授予本 session 权限：/grant write|exec|network"),
@@ -310,6 +311,20 @@ def _make_prompt_session():
 
     return PromptSession(completer=SlashCompleter(), complete_while_typing=True,
                          style=Style.from_dict({"prompt": "bold #22d3ee"}))
+
+
+def activity_event(event: dict, *, enabled: bool) -> None:
+    if not enabled:
+        return
+    kind = {"mcp": "MCP", "skill": "Skill", "worker": "Worker", "tool": "工具"}.get(
+        event.get("kind"), "工具")
+    status = {"running": "运行中", "ok": "完成", "error": "失败", "cancelled": "已取消"}.get(
+        event.get("status"), event.get("status", ""))
+    duration = event.get("duration")
+    suffix = f" · {duration:.2f}s" if isinstance(duration, (int, float)) else ""
+    detail = event.get("error") or ""
+    print(f"\n[{kind}] {event.get('label', event.get('name', ''))} {status}{suffix}" +
+          (f" · {detail[:120]}" if detail else ""), file=sys.stderr, flush=True)
 
 
 async def chat(args, store: Store, provider) -> int:
@@ -404,6 +419,8 @@ async def chat(args, store: Store, provider) -> int:
                 print(f"\n[worker {event.get('id')}] {event.get('status')}{action}  {event.get('description', '')}",
                       file=sys.stderr, flush=True)
             candidate.worker_callback = worker_event
+            candidate.activity_callback = lambda event: activity_event(
+                event, enabled=not args.json and sys.stdout.isatty())
 
         def on_text(delta: str):
             nonlocal streamed
@@ -413,12 +430,21 @@ async def chat(args, store: Store, provider) -> int:
             sys.stdout.write(delta)
             sys.stdout.flush()
 
+        def on_thinking(delta: str):
+            if not delta or args.json or not sys.stdout.isatty():
+                return
+            color = "" if os.environ.get("NO_COLOR") else "\033[2;37m"
+            reset = "" if not color else "\033[0m"
+            sys.stderr.write(color + delta + reset)
+            sys.stderr.flush()
+
         emit(event="accepted", task_id=candidate.id, status="queued")
         emit(event="start", task_id=candidate.id, status="running")
         try:
             await candidate.run(prompt, select_provider(), max_turns=args.max_turns,
                                 timeout=args.timeout,
                                 on_text=on_text if not args.json else None,
+                                on_thinking=on_thinking if not args.json else None,
                                 context_manager=manager)
         except asyncio.CancelledError:
             # Task.run has already recorded the cancelled status and audit row.
@@ -517,7 +543,7 @@ async def chat(args, store: Store, provider) -> int:
     help_text = ("多轮会话：每行续接当前 session，输入 / 显示命令菜单。"
                  "/help 帮助、/new 新会话、/resume 恢复、/sessions 列表、"
                  "/compact 压实、/rename 重命名、/permissions 权限、/grant 或 /revoke 授权、"
-                 "/approve 或 /deny 处理权限请求、/status 状态、"
+                 "/approve 或 /deny 处理权限请求、/status 状态、/todos 任务清单、"
                  "/jobs 任务、/cancel 取消、/ask 追问、/quit 退出。")
 
     def prompt():
@@ -657,6 +683,16 @@ async def chat(args, store: Store, provider) -> int:
                 message(f"session={info['id']} name={info.get('name') or '-'} turns={info['turns']} pending={info['pending']} "
                         f"summary={info['summary_method'] or '-'} tokens~{tokens}/{manager.max_tokens} "
                         f"write={grants['write']} exec={grants['exec']} network={grants['network']}")
+                continue
+            if line == "/todos":
+                rows = task.todos if task is not None else []
+                if not rows:
+                    message("当前没有任务清单。")
+                else:
+                    marks = {"completed": "[x]", "in_progress": "[>]", "pending": "[ ]"}
+                    message("任务清单：\n" + "\n".join(
+                        f"{marks.get(item['status'], '[ ]')} {item['id']} {item['text']}"
+                        for item in rows))
                 continue
             if line == "/compact":
                 if current is not None and not current.done():
@@ -818,15 +854,25 @@ async def one(args, store: Store, provider: Messages | Native) -> int:
         sys.stdout.write(delta)
         sys.stdout.flush()
 
+    def on_thinking(delta: str):
+        if not delta or args.json or not sys.stdout.isatty():
+            return
+        color = "" if os.environ.get("NO_COLOR") else "\033[2;37m"
+        reset = "" if not color else "\033[0m"
+        sys.stderr.write(color + delta + reset)
+        sys.stderr.flush()
+
     if not args.json and sys.stdout.isatty():
         def worker_event(event):
             action = f" · {event['action']}" if event.get("action") else ""
             print(f"\n[worker {event.get('id')}] {event.get('status')}{action}  {event.get('description', '')}",
                   file=sys.stderr, flush=True)
         task.worker_callback = worker_event
+        task.activity_callback = lambda event: activity_event(event, enabled=True)
     handle = asyncio.create_task(task.run(
         prompt, provider, max_turns=args.max_turns, timeout=args.timeout,
-        on_text=on_text if not args.json else None))
+        on_text=on_text if not args.json else None,
+        on_thinking=on_thinking if not args.json else None))
     loop = asyncio.get_running_loop()
 
     def interrupt():

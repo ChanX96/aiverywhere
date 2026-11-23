@@ -162,7 +162,7 @@ const newSessionId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
 
 let chat = {
   session: newSessionId(), messages: [], running: false, writable: false, exec: false, network: true,
-  started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
+  speed: "normal", started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
 };
 
 const webCommands = [
@@ -313,10 +313,54 @@ function richAnswer(value) {
   return renderMarkdown(value);
 }
 
-function thinkingHtml(value, live = false) {
+function thinkingHtml(value, key) {
   if (!value) return "";
-  return `<details class="reasoning"${live ? " open" : ""}><summary>思考过程 <small>模型返回的推理文本</small></summary>` +
+  return `<details class="reasoning" data-key="${key}">` +
+    `<summary>思考过程 <small>模型返回的推理文本</small></summary>` +
     `<div class="reasoning-body">${renderMarkdown(value)}</div></details>`;
+}
+
+const activityNames = {tool: "工具", skill: "Skill", mcp: "MCP", worker: "Worker"};
+const activityStates = {running: "运行中", ok: "完成", error: "失败", cancelled: "已取消"};
+
+function activityHtml(item, key) {
+  const label = item.label || item.name || "调用";
+  const kind = activityNames[item.kind] || "工具";
+  const state = activityStates[item.status] || item.status || "";
+  const duration = Number.isFinite(Number(item.duration)) && item.duration != null
+    ? ` · ${Number(item.duration).toFixed(2)}s` : "";
+  const input = item.input ? `<pre>${esc(item.input)}</pre>` : "";
+  const output = item.output ? `<pre>${esc(item.output)}</pre>` : "";
+  const error = item.error ? `<p class="activity-error">${esc(item.error)}</p>` : "";
+  return `<details class="activity ${esc(item.status || "")}" data-key="${key}">` +
+    `<summary><span class="activity-kind">${kind}</span><b>${esc(label)}</b>` +
+    `<span class="activity-state">${esc(state)}${duration}</span></summary>` +
+    `<div class="activity-body">${error}${input}${output}</div></details>`;
+}
+
+function todosHtml(todos, key) {
+  if (!todos?.length) return "";
+  const completed = todos.filter(item => item.status === "completed").length;
+  const rows = todos.map(item => {
+    const mark = item.status === "completed" ? "[x]" : item.status === "in_progress" ? "[>]" : "[ ]";
+    return `<li class="${esc(item.status || "pending")}"><span>${mark}</span>${esc(item.text)}</li>`;
+  }).join("");
+  return `<details class="todo-panel" data-key="${key}" open>` +
+    `<summary>任务清单 <small>${completed}/${todos.length} 完成</small></summary>` +
+    `<ul>${rows}</ul></details>`;
+}
+
+function processHtml(message, index) {
+  const activities = Array.isArray(message.activities) ? message.activities : [];
+  const todos = Array.isArray(message.todos) ? message.todos : [];
+  const thinking = thinkingHtml(message.thinking || "", `${index}-thinking`);
+  const rows = activities.map((item, position) =>
+    activityHtml(item, `${index}-activity-${position}`)).join("");
+  const process = `${thinking}${rows}`;
+  const summary = `过程${activities.length ? ` · ${activities.length} 次调用` : ""}${thinking ? " · 思考" : ""}`;
+  return `${todosHtml(todos, `${index}-todos`)}` +
+    (process ? `<details class="process" data-key="${index}-process"><summary>${summary}</summary>` +
+      `<div class="process-body">${process}</div></details>` : "");
 }
 
 function chatEmpty() {
@@ -335,7 +379,7 @@ function chatEmpty() {
 
 function chatThread() {
   if (!chat.messages.length) return chatEmpty();
-  return chat.messages.map(message => {
+  return chat.messages.map((message, index) => {
     if (message.role === "system") {
       return `<div class="message system"><div class="bubble">${esc(message.text)}</div></div>`;
     }
@@ -343,19 +387,17 @@ function chatThread() {
       return `<div class="message user"><div class="avatar">你</div><div class="bubble">${esc(message.text)}</div></div>`;
     }
     if (message.pending) {
-      const reasoning = thinkingHtml(message.thinking || "", true);
       const streamed = message.text
         ? `<div class="stream-answer">${richAnswer(message.text)}<span class="stream-cursor"></span></div>`
         : `<div class="thinking"><i></i><i></i><i></i><span>处理中 · ${chatElapsed()}s</span></div>`;
       return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">
-        ${reasoning}${streamed}
+        ${processHtml(message, index)}${streamed}
         <p class="faint">本地模型正在选择工具并核实结果</p></div></div>`;
     }
-    const reasoning = thinkingHtml(message.thinking || "", true);
     const body = message.error
       ? `<span class="error">${esc(message.error)}</span>`
       : richAnswer(message.text || "（空答复）");
-    return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">${reasoning}${body}${chatReceipts(message.receipts)}</div></div>`;
+    return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">${processHtml(message, index)}${body}${chatReceipts(message.receipts)}</div></div>`;
   }).join("");
 }
 
@@ -395,6 +437,12 @@ function chatView() {
           <input type="checkbox" id="chat-exec" ${chat.exec ? "checked" : ""} aria-label="允许执行项目命令"></label>
         <label class="switch-row"><span><b>允许联网搜索/抓取</b><small>仅当前浏览器会话</small></span>
           <input type="checkbox" id="chat-network" ${chat.network ? "checked" : ""} aria-label="允许联网"></label>
+        <label class="switch-row"><span><b>流式速度</b><small>只影响文字显示，不改变模型</small></span>
+          <select id="chat-speed" class="speed-select" aria-label="流式速度">
+            <option value="slow" ${chat.speed === "slow" ? "selected" : ""}>慢</option>
+            <option value="normal" ${chat.speed === "normal" ? "selected" : ""}>标准</option>
+            <option value="fast" ${chat.speed === "fast" ? "selected" : ""}>快</option>
+          </select></label>
         <p class="faint">关闭时只读。开启后模型可以写入项目或执行命令；切换模式会开始新的上下文。</p>
       </section>
       <section class="panel">
@@ -409,7 +457,12 @@ function paintChat() {
   const stream = $("#chat-stream");
   if (!stream) return;
   const stick = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 90;
+  const details = new Map([...stream.querySelectorAll("details[data-key]")].map(item =>
+    [item.dataset.key, item.open]));
   stream.innerHTML = chatThread();
+  stream.querySelectorAll("details[data-key]").forEach(item => {
+    if (details.has(item.dataset.key)) item.open = details.get(item.dataset.key);
+  });
   const receipts = $("#chat-receipts");
   if (receipts) receipts.innerHTML = chat.receipts.length
     ? chat.receipts.map(item => `<span class="receipt ${item.ok === false ? "err" : ""}" title="${esc(item.error || item.tool || "tool")}">${esc([item.tool, item.path].filter(Boolean).join(" · ") || "tool")}</span>`).join("")
@@ -423,6 +476,40 @@ function paintChat() {
   if (stick) stream.scrollTop = stream.scrollHeight;
 }
 
+const STREAM_SPEEDS = {
+  slow: {tick: 80, base: 1, max: 1},
+  normal: {tick: 45, base: 1, max: 2},
+  fast: {tick: 30, base: 2, max: 6},
+};
+
+function pumpStream(message) {
+  if (message.streamTimer) return;
+  const speed = STREAM_SPEEDS[chat.speed] || STREAM_SPEEDS.normal;
+  message.streamTarget = message.streamTarget || message.text || "";
+  message.streamTimer = setInterval(() => {
+    const target = message.streamTarget || "";
+    if (message.text.length < target.length) {
+      const backlog = target.length - message.text.length;
+      const take = Math.min(speed.max, Math.max(speed.base, Math.ceil(backlog / 80)));
+      message.text = target.slice(0, message.text.length + take);
+      paintChat();
+      return;
+    }
+    if (message.streamDone) {
+      message.streamDone = false;
+      message.pending = false;
+      clearInterval(message.streamTimer);
+      message.streamTimer = null;
+      paintChat();
+    }
+  }, speed.tick);
+}
+
+function stopStream(message) {
+  if (message?.streamTimer) clearInterval(message.streamTimer);
+  if (message) message.streamTimer = null;
+}
+
 async function pollChat() {
   if (!chat.running) return;
   const session = chat.session;
@@ -431,29 +518,42 @@ async function pollChat() {
     if (session !== chat.session) return;
     chat.status = state;
     const assistant = chat.messages[chat.messages.length - 1];
-    if (state.status !== "running") {
-      if (assistant?.role === "assistant" && assistant.pending) {
-        assistant.pending = false;
-        assistant.text = state.answer || assistant.text || "";
-        assistant.thinking = state.thinking || assistant.thinking || "";
+    if (assistant?.role === "assistant" && assistant.pending) {
+      assistant.thinking = state.thinking || assistant.thinking || "";
+      assistant.activities = Array.isArray(state.activities) ? state.activities : assistant.activities;
+      assistant.todos = Array.isArray(state.todos) ? state.todos : assistant.todos;
+      if (state.status === "running") {
+        assistant.streamTarget = state.stream_text || assistant.streamTarget || "";
+        assistant.streamDone = false;
+        pumpStream(assistant);
+      } else {
         assistant.error = state.error || (state.status === "idle" ? "会话状态已重置，请开始新会话。" : "");
         assistant.receipts = Array.isArray(state.receipts) ? state.receipts : [];
+        const answer = state.answer || "";
+        if (answer) {
+          if (assistant.text && !answer.startsWith(assistant.text)) assistant.text = "";
+          assistant.streamTarget = answer;
+          assistant.streamDone = true;
+          pumpStream(assistant);
+        } else {
+          stopStream(assistant);
+          assistant.pending = false;
+        }
       }
+    }
+    if (state.status !== "running") {
       chat.receipts = Array.isArray(state.receipts) ? state.receipts : [];
       chat.running = false;
       paintChat();
       if (assistant?.error) toast(assistant.error, true);
       return;
     }
-    if (assistant?.role === "assistant" && assistant.pending) {
-      assistant.text = state.stream_text || assistant.text || "";
-      assistant.thinking = state.thinking || assistant.thinking || "";
-    }
     paintChat();
-    chat.timer = setTimeout(pollChat, 300);
+    chat.timer = setTimeout(pollChat, 250);
   } catch (error) {
     const assistant = chat.messages[chat.messages.length - 1];
     if (assistant?.role === "assistant") {
+      stopStream(assistant);
       assistant.pending = false;
       assistant.error = error.message;
     }
@@ -539,7 +639,9 @@ async function sendChat() {
   input.value = "";
   hideSlash();
   chat.messages.push({role: "user", text: message});
-  chat.messages.push({role: "assistant", pending: true, text: "", thinking: "", error: "", receipts: []});
+  chat.messages.push({role: "assistant", pending: true, text: "", thinking: "",
+    activities: [], todos: [], streamTarget: "", streamDone: false, streamTimer: null,
+    error: "", receipts: []});
   chat.running = true;
   chat.started = Date.now();
   chat.receipts = [];
@@ -573,6 +675,7 @@ async function resetChat() {
     toast("当前任务仍在处理，完成后再开始新会话。", true);
     return false;
   }
+  chat.messages.forEach(stopStream);
   const previous = chat.session;
   try {
     await api("/api/chat/reset", "POST", {session: previous});
@@ -885,6 +988,16 @@ $("#view").addEventListener("change", event => {
   if (event.target.id === "chat-writable") setChatWritable(event.target.checked).catch(e => toast(e.message, true));
   if (event.target.id === "chat-exec") setChatExec(event.target.checked).catch(e => toast(e.message, true));
   if (event.target.id === "chat-network") setChatNetwork(event.target.checked).catch(e => toast(e.message, true));
+  if (event.target.id === "chat-speed") {
+    chat.speed = event.target.value;
+    for (const message of chat.messages) {
+      if (message.streamTimer) {
+        clearInterval(message.streamTimer);
+        message.streamTimer = null;
+        pumpStream(message);
+      }
+    }
+  }
 });
 $("#view").addEventListener("submit", event => {
   if (event.target.id === "chat-form") { event.preventDefault(); sendChat(); }

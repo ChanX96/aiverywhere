@@ -1,3 +1,3 @@
 """A small agent runtime shared by hosts and the command line."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

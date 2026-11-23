@@ -39,6 +39,12 @@ description: 在任意宿主或终端中处理代码、文档和日常任务；�
 
 `finish` 固定。覆盖文件保留相同的“契约版本 1”和文档分区；版本不兼容时说明模块并暂停受影响操作。项目本地实例通常 `project_key=default`。无 CLI 时运行 `sh <skill>/scripts/workflow-path.sh --project <项目>` 查看默认目录、项目 key 和覆盖目录；共享或自定义实例再加 `--home <实例>`。有 CLI 时也可用 `aiverywhere workflow path` 或 `aiverywhere workflow show <module>`。
 
+## 任务清单与过程
+
+大任务在 `plan` 后维护一个短清单：CLI 工具列表提供 `todo` 时用 `todo set/update`，宿主使用自己的 checklist 能力；简单任务不要创建清单。范围不清时先生成 checklist 请用户选择或调整，只执行选定项。执行中把清单项推进到 `in_progress`/`completed`，交付时报告未完成项。
+
+CLI 和 Web 的过程记录来自内核统一活动事件，包含每个 tool、Skill/MCP 调用的状态、耗时和摘要；宿主使用自己的子 agent/工具时也按相同粒度交回，不要只写“已完成”。Web 默认折叠过程面板，点击展开；`/todos` 查看 CLI 清单。
+
 ## 明确记忆要求
 
 - 用户明确要求“记住”，或设定长期默认值、纠正已有记忆时，立即尝试保存并核对 ID/revision；不要只把它写进回答。CLI 工具列表提供 `require_memory` 时，先登记必记项再保存；纯宿主在 Plan 中记录同样的必记项。

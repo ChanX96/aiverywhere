@@ -17,7 +17,7 @@
 1. 逐条核对必记项；已经保存的记录按 ID 和 revision 回读。CLI 中优先使用 `require_memory` 登记的条目，匹配 `remember` 的 kind/title 和成功回执。
 2. 纠正已有记录时使用原 ID 和预期 revision；冲突时保留旧记录。
 3. 写后回读实际内容；没有格式校验能力时标为“已写入，格式待校验”。
-4. 回执丢失时先按原 ID 对账，不重复增加修订。
+4. 回执丢失时先按原 ID 对账，不重复增加修订；大任务报告 todo 完成数和未完成项。
 5. 无 CLI 的宿主先用 `scripts/workflow-path.sh --project .` 找到默认/覆盖模块；读取实际生效的 `finish.md`，用 `write-memory.sh` 或原生文件工具保存，按返回的 ID 用 `read-memory.sh` 或原生文件工具回读 revision。无 `jq` 时使用宿主原生的 JSON/文件校验，不把“未读取”说成“已确认”。
 6. 业务结果与记忆结果分开判断：
    - 业务完成、必记项完成：completed；

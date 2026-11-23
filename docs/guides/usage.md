@@ -181,7 +181,8 @@ aiverywhere chat --resume <session-id>
 /rename <name>       重命名当前 session
 /resume <session-id> 恢复指定 session
 /sessions            列出当前项目 session（含名称和最近更新时间）
-/status              session、turn 数、token 估算和摘要状态
+/status              session、turn 数、token 估算、摘要和待办
+/todos               查看任务清单和完成情况
 /compact             手动压实当前上下文
 ```
 
@@ -266,7 +267,7 @@ sh <skill>/scripts/workflow-path.sh --project .
 
 `run`/`chat` 的主任务可以调用 `delegate(tasks)`，默认最多 2 个、深度 1 层的 worker。每个 worker 在安装根的 `work/<主任务>/<worker>/` 私有副本中运行，使用同一个 `Task.run()`、`SKILL.md` 和记忆项目；它不能改真实项目。worker 交回摘要、记忆候选和 artifact（路径、大小、SHA-256），不能直接写共享记忆；主任务核验后调用 `accept_artifact` 写入授权目标并统一提交记忆。命令隔离通过实际探测 Seatbelt 或 bubblewrap 决定；不可用时 worker 只能使用受限文件工具。
 
-交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/new`、`/resume`、`/sessions`、`/status`、`/compact`、`/permissions`、`/grant`、`/revoke`、`/jobs`、`/cancel`、`/ask`、`/quit`。
+交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/new`、`/resume`、`/sessions`、`/status`、`/todos`、`/compact`、`/permissions`、`/grant`、`/revoke`、`/jobs`、`/cancel`、`/ask`、`/quit`。
 
 非 JSON 的交互和一次性运行会流式显示正文；`--json` 保持一份最终回执。Ctrl+C 取消当前主任务；TTY 任务结束后重新显示提示符。非 TTY 输入仍可用 `/cancel`，`/cancel <worker-id>` 取消指定 worker。已完成产物仍可查；外部操作结果未知时保留待核对状态。
 
@@ -302,7 +303,7 @@ aiverywhere web
 
 `link` 创建指向活动 skill 目录的符号链接，重复运行保持幂等；旧的文件链接可迁移，指向其他位置的外来链接拒绝覆盖。
 
-工作台的“对话与工作”把任务提交给当前实例，默认只读；模型返回的回答按 Markdown 渲染（标题、列表、引用、链接、内联代码、带语言标签和复制按钮的代码块），思考过程可折叠查看，回答会随 SSE/轮询增量显示；可以分别开启“允许修改项目文件”“允许执行项目命令”“允许联网搜索/抓取”。**session 是持久对话，task 是一次执行**：CLI session 写入 `data/sessions/`，可用 `aiverywhere chat --resume <id>` 或交互内 `/resume <id>` 继续；Web 对话是当前 web 进程内的临时会话，切换模式或重启 supervisor 会重置上下文。Web 的“会话与任务”页列出 CLI 持久 session 及恢复命令，“运行日志”按 task 展示执行记录。右侧列出本轮工具回执。模型未配置时，页面会报告错误，不会静默降级。
+工作台的“对话与工作”把任务提交给当前实例，默认只读；模型返回的回答按 Markdown 渲染（标题、列表、引用、链接、内联代码、带语言标签和复制按钮的代码块），思考过程以浅灰色可折叠查看，工具/Skill/MCP 调用默认折叠在“过程”面板中，回答会随 SSE/轮询增量显示，并可在右侧选择慢/标准/快显示速度；大任务的清单和完成情况显示在“任务清单”中。可以分别开启“允许修改项目文件”“允许执行项目命令”“允许联网搜索/抓取”。**session 是持久对话，task 是一次执行**：CLI session 写入 `data/sessions/`，可用 `aiverywhere chat --resume <id>` 或交互内 `/resume <id>` 继续；Web 对话是当前 web 进程内的临时会话，切换模式或重启 supervisor 会重置上下文。Web 的“会话与任务”页列出 CLI 持久 session 及恢复命令，“运行日志”按 task 展示执行记录。右侧列出本轮工具回执。模型未配置时，页面会报告错误，不会静默降级。
 
 Web 的“Agent 定义”现在编辑整个 bundle：`SKILL.md`、`references/*.md|json` 和 `scripts/*.sh`。每个文件按内容哈希做并发修订检查；主文件仍使用活动版本规则。
 

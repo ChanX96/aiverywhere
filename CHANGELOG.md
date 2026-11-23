@@ -4,6 +4,28 @@
 
 ## [Unreleased]
 
+## [0.4.0] - Unreleased
+
+### Added
+
+- CLI/Web 任务活动摘要：每个 tool、Skill、MCP 调用的运行中/完成/失败状态、耗时和输入/输出。
+- Web 过程面板默认折叠，可点击展开；思考过程以浅灰色显示。
+- Web todo/checklist：大任务可查看清单与完成进度；模型通过 `todo` 工具维护，CLI 用 `/todos` 查看，JSON 回执包含 `todos` 和 `activities`。
+- CLI 非 JSON TTY 显示灰色 thinking 和工具活动；`NO_COLOR` 可关闭颜色。
+- Web 流式文字增加慢/标准/快显示速度控制。
+
+### Changed
+
+- 任务回执增加 `activities` 和 `todos`，不新增持久化格式或依赖。
+
+## [0.3.1] - Unreleased
+
+### Fixed
+
+- Web 旧 supervisor 在新 venv 替换后仍持有失效静态资源，重启后恢复。
+- Web 流式文本增加前端字符节流，避免一次跳出整段。
+- 思考过程改为浅灰色可读样式，并保留流式期间自动展开。
+
 ## [0.3.0] - Unreleased
 
 ### Added

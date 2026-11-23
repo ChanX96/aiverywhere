@@ -76,6 +76,11 @@ NATIVE = [
          {"url": TEXT}, ("url",)),
     DELEGATE,
     ACCEPT,
+    tool("todo", "维护当前任务的待办清单；大任务先 set，执行中 update，完成后标记 completed / maintain the task checklist",
+         {"action": {"type": "string", "enum": ["set", "update", "clear", "list"]},
+          "items": ARRAY, "id": TEXT, "text": TEXT,
+          "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}},
+         ("action",)),
     tool("read_skill", "按需读取一个 workflow 模块；共享实例和项目覆盖均可读取 / load one workflow module on demand",
          {"module": {"type": "string", "enum": ["plan", "recall", "execute", "extract", "finish"]}},
          ("module",)),
@@ -126,12 +131,14 @@ class Tools:
                  agent_edit: str | None = None, read_only: bool = False,
                  exec_allowed: bool = False, network_allowed: bool = True,
                  workspace: Path | None = None, allow_workers: bool = False,
-                 memory_writable: bool = True, requirements: list | None = None):
+                 memory_writable: bool = True, requirements: list | None = None,
+                 todos: list | None = None):
         self.store = store
         self.task_id = task_id
         self.agent_edit = agent_edit
         self.memory_writable = memory_writable
         self.requirements = requirements if requirements is not None else []
+        self.todos = todos if todos is not None else []
         self.skill_revisions = {}
         self.workspace = (workspace or store.project).resolve()
         self.sandbox = self.workspace if self.workspace != store.project.resolve() else None
@@ -164,7 +171,8 @@ class Tools:
         if not self.memory_writable:
             for name in ("read_skill", "require_memory", "remember", "clue_done", "share_skill", "used_skill"):
                 self.available.pop(name, None)
-        direct = {"read_file", "list_files", "search_files", "recall", "read_skill", "require_memory", "remember", "write_file",
+        direct = {"read_file", "list_files", "search_files", "recall", "read_skill", "todo",
+                  "require_memory", "remember", "write_file",
                   "edit_file", "run_command", "web_search", "web_fetch", "revise_agent"}
         if allow_workers:
             direct.add("delegate")
@@ -173,6 +181,11 @@ class Tools:
         if read_only:
             direct.add("clue_done")
         self.active = {"discover": DISCOVER} | {n: s for n, s in self.available.items() if n in direct}
+
+    def _todo_summary(self) -> dict:
+        completed = sum(item["status"] == "completed" for item in self.todos)
+        return {"todos": [dict(item) for item in self.todos],
+                "completed": completed, "total": len(self.todos)}
 
     def _fixed_finish(self, path: Path) -> bool:
         fixed = (self.store.skill_dir / "references/workflow/finish.md").resolve()
@@ -492,6 +505,33 @@ class Tools:
         validate_arguments(self.active[name], values)
         if name in {"require_memory", "remember", "clue_done", "share_skill", "used_skill"} and not self.memory_writable:
             raise PermissionError("worker 不能直接写共享记忆，请交回候选记忆给主任务")
+        if name == "todo":
+            action = values["action"]
+            if action == "list":
+                return self._todo_summary()
+            if action == "clear":
+                self.todos.clear()
+                return self._todo_summary()
+            if action == "set":
+                items = values.get("items") or []
+                if len(items) > 50:
+                    raise ValueError("待办清单最多 50 项")
+                self.todos[:] = [
+                    {"id": f"t{index + 1}", "text": text.strip()[:500], "status": "pending"}
+                    for index, text in enumerate(items) if text.strip()
+                ]
+                return self._todo_summary()
+            ident = values.get("id")
+            status = values.get("status")
+            text = values.get("text")
+            item = next((row for row in self.todos if row["id"] == ident), None)
+            if item is None:
+                raise ValueError("找不到该待办项")
+            if status is not None:
+                item["status"] = status
+            if text is not None:
+                item["text"] = text.strip()[:500]
+            return self._todo_summary()
         if name == "read_skill":
             from . import workflow
             loaded = workflow.load_module(self.store, values["module"])

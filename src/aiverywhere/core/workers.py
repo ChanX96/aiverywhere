@@ -109,7 +109,8 @@ async def delegate(parent: Task, tasks: list[str], provider) -> dict:
             workspace, baseline = await asyncio.to_thread(_workspace, parent, index)
             worker = Task(parent.store, writable=True, exec_allowed=parent.exec_allowed,
                           network_allowed=parent.network_allowed, approval=parent.approval,
-                          workspace=workspace, entry="worker", allow_workers=False)
+                          workspace=workspace, entry="worker", allow_workers=False,
+                          memory_writable=False)
             if parent.worker_callback:
                 worker.activity_callback = lambda action: parent.worker_callback({
                     "id": ident, "status": "running", "action": action, "description": description})
@@ -118,7 +119,8 @@ async def delegate(parent: Task, tasks: list[str], provider) -> dict:
             if parent.worker_callback:
                 parent.worker_callback({"id": ident, "status": "started", "description": description})
             prompt = (f"子任务：{description}\n主任务目标：{parent.goal or ''}\n"
-                      "在私有工作区完成，交回简洁结果、证据和产物说明。不要修改实例配置。")
+                      "在私有工作区完成，交回简洁结果、证据、产物说明和可复用记忆候选。"
+                      "不要直接写共享记忆，也不要修改实例配置；由主任务统一核验和提交。")
             await worker.run(prompt, provider, max_turns=max(2, min(parent.max_turns, 8)),
                              timeout=parent.timeout)
             artifacts = await asyncio.to_thread(_artifacts, parent, worker, ident, workspace, baseline)

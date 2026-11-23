@@ -227,11 +227,34 @@ aiverywhere --no-network
 
 模型的权限请求只显示在终端，不能自行批准。Web 工作台对写入、命令和联网使用同样的 Task 权限字段。
 
+### 工作流模块与项目覆盖
+
+主 `SKILL.md` 只负责选择步骤和交付；具体做法按需读取 `references/workflow/` 下的 `plan`、`recall`、`execute`、`extract`、`finish`。模块不是额外模型调用，简单任务可以直接跳过。
+
+项目可以只覆盖需要的模块：
+
+```text
+<实例>/overrides/<project_key>/workflow/plan.md
+<实例>/overrides/<project_key>/workflow/recall.md
+<实例>/overrides/<project_key>/workflow/execute.md
+<实例>/overrides/<project_key>/workflow/extract.md
+```
+
+`finish` 固定，不允许覆盖。每个默认模块和覆盖文件都带“契约版本 1”；版本不兼容时 CLI 会报告影响模块并拒绝执行受影响操作。
+
+```sh
+aiverywhere workflow list
+aiverywhere workflow path
+aiverywhere workflow show extract
+```
+
+用户明确要求保存、设定默认值或纠正记忆时，CLI 模型可先调用 `require_memory` 登记必记项，再用 `remember` 保存；业务完成但必记项未回读确认时任务标为 `partial`。宿主的等价做法是在 Plan 中记录必记项，并在交付前核对。
+
 ### 工具、worker 与取消
 
 文件工具包括 `list_files`、`read_file`、`search_files`、`write_file` 和 `edit_file`。`write_file`/`edit_file` 需要 `--allow-write`；`edit_file` 用读取到的 SHA-256 和唯一匹配片段，冲突时拒绝覆盖。`run_command(argv, cwd, timeout)` 需要 `--allow-exec`，返回退出码、限长输出和超时标记；取消时会终止进程组。`web_search` 使用免 Key 的 Bing RSS，失败时回退 DuckDuckGo HTML，`web_fetch` 只读取公开文本页面，拒绝内网和保留地址。
 
-`run`/`chat` 的主任务可以调用 `delegate(tasks)`，默认最多 2 个、深度 1 层的 worker。每个 worker 在安装根的 `work/<主任务>/<worker>/` 私有副本中运行，使用同一个 `Task.run()`、`SKILL.md` 和记忆项目；它不能改真实项目。worker 交回摘要和 artifact（路径、大小、SHA-256），主任务核验后调用 `accept_artifact` 写入授权目标。命令隔离通过实际探测 Seatbelt 或 bubblewrap 决定；不可用时 worker 只能使用受限文件工具。
+`run`/`chat` 的主任务可以调用 `delegate(tasks)`，默认最多 2 个、深度 1 层的 worker。每个 worker 在安装根的 `work/<主任务>/<worker>/` 私有副本中运行，使用同一个 `Task.run()`、`SKILL.md` 和记忆项目；它不能改真实项目。worker 交回摘要、记忆候选和 artifact（路径、大小、SHA-256），不能直接写共享记忆；主任务核验后调用 `accept_artifact` 写入授权目标并统一提交记忆。命令隔离通过实际探测 Seatbelt 或 bubblewrap 决定；不可用时 worker 只能使用受限文件工具。
 
 交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/new`、`/resume`、`/sessions`、`/status`、`/compact`、`/permissions`、`/grant`、`/revoke`、`/jobs`、`/cancel`、`/ask`、`/quit`。
 

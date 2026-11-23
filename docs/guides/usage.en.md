@@ -212,6 +212,29 @@ aiverywhere --no-network
 
 The model can request permission but cannot grant it. The Web console uses the same Task permission fields for writes, commands, and network access.
 
+### Workflow modules and project overrides
+
+The main `SKILL.md` selects steps and owns delivery. Detailed methods are loaded on demand from `references/workflow/`: `plan`, `recall`, `execute`, `extract`, and `finish`. A module is a responsibility, not an extra model call; simple tasks may skip all of them.
+
+A project can override only the modules it needs:
+
+```text
+<instance>/overrides/<project_key>/workflow/plan.md
+<instance>/overrides/<project_key>/workflow/recall.md
+<instance>/overrides/<project_key>/workflow/execute.md
+<instance>/overrides/<project_key>/workflow/extract.md
+```
+
+`finish` is fixed and cannot be overridden. Every default and override declares contract version 1; an incompatible override is reported and the affected operation is refused.
+
+```sh
+aiverywhere workflow list
+aiverywhere workflow path
+aiverywhere workflow show extract
+```
+
+When a user explicitly asks to remember something, set a default, or correct memory, the CLI model may register the required item with `require_memory`, then save it with `remember`. If the business result is complete but the required memory cannot be read back, the task is `partial`. A host records the same item in its Plan and checks it before delivery.
+
 ### Tools, workers, and cancellation
 
 File tools are `list_files`, `read_file`, `search_files`, `write_file`, and `edit_file`. Writes and edits require `--allow-write`; `edit_file` uses the SHA-256 from the read and a unique fragment, refusing stale or ambiguous edits. `run_command(argv, cwd, timeout)` requires `--allow-exec`, returns an exit code, bounded output, and a timeout flag, and terminates the process group on cancellation. `web_search` uses keyless Bing RSS and falls back to DuckDuckGo HTML; `web_fetch` reads only public text pages and rejects loopback, private, and reserved addresses.

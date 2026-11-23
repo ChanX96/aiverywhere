@@ -229,6 +229,12 @@ Web 是 supervisor 托管的单项目控制面。对话 session 仍是 Web 进�
 
 Agent 页面编辑完整 bundle：`SKILL.md`、`references/*.md|json`、`scripts/*.sh`。主文件沿用活动版本修订；其他文件使用内容哈希做并发检查，路径和扩展名在服务端限制。日志页按 task 展示，概览和运行记录提供入口。
 
+### 模块化工作流
+
+主 `SKILL.md` 负责选择步骤和完成判据，`references/workflow/` 下的 `plan`、`recall`、`execute`、`extract`、`finish` 按需加载。模块是职责划分，不是额外模型调用；简单任务零检索、零 worker、零长期写入。项目可用 `overrides/<project_key>/workflow/*.md` 覆盖前四个模块，`finish` 固定；覆盖声明契约版本，版本不兼容时停止受影响操作。
+
+CLI 的 `require_memory` 登记本次必记项，`remember` 成功后按 ID/revision 回读；业务完成但必记项未确认时任务标为 `partial`。worker 共享父任务 Store，但工具层禁止直接写共享记忆，只交回候选。
+
 ### 常驻 supervisor 与通用通道
 
 CLI 默认确保一个单实例 supervisor 运行。它持有实例内的 PID/端口/token/日志，托管本地 Web 和 channel worker；CLI 退出不会终止它。`aiverywhere start/stop/status` 显式管理，不注册系统服务。

@@ -3,7 +3,7 @@
 const $ = (selector) => document.querySelector(selector);
 const token = $('meta[name="session"]').content;
 const titles = {chat: "对话与工作", overview: "实例概览", memory: "记忆与技能", agent: "Agent 定义", sessions: "会话与任务", logs: "运行日志"};
-const labels = {completed: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断", running: "运行中"};
+const labels = {completed: "已完成", partial: "部分完成", failed: "失败", cancelled: "已取消", interrupted: "已中断", running: "运行中"};
 const kindName = (kind) => kind === "skill" ? "技能" : kind === "clue" ? "线索" : "记忆";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const date = (seconds) => seconds ? new Date(seconds * 1000).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}) : "—";

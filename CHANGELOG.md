@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- 模块化工作流：主 SKILL.md + plan、recall、execute、extract、finish 五个按需模块。
+- 项目级 workflow 覆盖目录和 `aiverywhere workflow list/path/show`。
+- `require_memory` 必记项登记、写后回读和 `partial` 交付状态。
+- worker 记忆写权限在工具层收口，只交回候选。
+
 ## [0.1.0] - 2026-11-22
 
 ### Added

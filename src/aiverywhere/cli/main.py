@@ -90,6 +90,12 @@ def parser() -> argparse.ArgumentParser:
     publication.add_argument("--update", metavar="REV", type=revision, help="从标准输入发布完整文件，核对旧修订")
     sub.add_parser("env", help="只读查看本地运行环境、已授权范围和未验证能力")
     sub.add_parser("bridges", help="列出项目/实例中的 bridge 插件和健康状态")
+    workflow = sub.add_parser("workflow", help="查看按需加载的 workflow 模块和项目覆盖")
+    workflow_ops = workflow.add_subparsers(dest="op", required=True)
+    workflow_ops.add_parser("list", help="列出模块来源和契约兼容性")
+    workflow_ops.add_parser("path", help="输出默认模块与覆盖目录")
+    show_workflow = workflow_ops.add_parser("show", help="读取实际生效的模块正文")
+    show_workflow.add_argument("module", choices=("plan", "recall", "execute", "extract", "finish"))
     start = sub.add_parser("start", help="启动常驻 supervisor 和 Web")
     start.add_argument("--port", type=int, choices=range(0, 65536), metavar="0-65535")
     sub.add_parser("stop", help="停止常驻 supervisor")
@@ -915,6 +921,15 @@ def main(argv=None) -> int:
         if args.command == "bridges":
             from ..integrations.bridges.registry import discover
             print_json(discover(store, check_health=True))
+            return 0
+        if args.command == "workflow":
+            from ..core import workflow
+            if args.op == "list":
+                print_json(workflow.list_modules(store))
+            elif args.op == "path":
+                print_json(workflow.paths(store))
+            else:
+                print_json(workflow.load_module(store, args.module))
             return 0
         if args.command in {"start", "stop", "status"}:
             from ..core import supervisor

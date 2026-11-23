@@ -76,6 +76,9 @@ NATIVE = [
          {"url": TEXT}, ("url",)),
     DELEGATE,
     ACCEPT,
+    tool("require_memory", "登记本次任务的必记项；用户明确要求保存、设定默认或纠正记忆时，在写入前调用 / register a required memory item",
+         {"kind": {"type": "string", "enum": ["fact", "skill", "clue"]}, "title": TEXT, "reason": TEXT},
+         ("kind", "title")),
     tool("remember", "保存一条持久事实、可复用技能或待处理线索 / save fact, skill or clue. 纠正旧条目时传 revision。",
          {"kind": {"type": "string", "enum": ["fact", "skill", "clue"]}, "title": TEXT, "text": TEXT,
           "revision": INTEGER}, ("kind", "title", "text")),
@@ -119,10 +122,13 @@ class Tools:
     def __init__(self, store: Store, task_id: str, *, writable: bool = False,
                  agent_edit: str | None = None, read_only: bool = False,
                  exec_allowed: bool = False, network_allowed: bool = True,
-                 workspace: Path | None = None, allow_workers: bool = False):
+                 workspace: Path | None = None, allow_workers: bool = False,
+                 memory_writable: bool = True, requirements: list | None = None):
         self.store = store
         self.task_id = task_id
         self.agent_edit = agent_edit
+        self.memory_writable = memory_writable
+        self.requirements = requirements if requirements is not None else []
         self.skill_revisions = {}
         self.workspace = (workspace or store.project).resolve()
         self.sandbox = self.workspace if self.workspace != store.project.resolve() else None
@@ -152,7 +158,10 @@ class Tools:
                 self.available["accept_artifact"] = ACCEPT
         if not agent_edit:
             self.available.pop("revise_agent", None)
-        direct = {"read_file", "list_files", "search_files", "recall", "remember", "write_file",
+        if not self.memory_writable:
+            for name in ("require_memory", "remember", "clue_done", "share_skill", "used_skill"):
+                self.available.pop(name, None)
+        direct = {"read_file", "list_files", "search_files", "recall", "require_memory", "remember", "write_file",
                   "edit_file", "run_command", "web_search", "web_fetch", "revise_agent"}
         if allow_workers:
             direct.add("delegate")
@@ -467,6 +476,16 @@ class Tools:
         if name not in self.active:
             raise PermissionError("工具尚未发现或未获授权，请先调用 discover")
         validate_arguments(self.active[name], values)
+        if name in {"require_memory", "remember", "clue_done", "share_skill", "used_skill"} and not self.memory_writable:
+            raise PermissionError("worker 不能直接写共享记忆，请交回候选记忆给主任务")
+        if name == "require_memory":
+            title = values["title"].strip()
+            if not title or len(title) > 160:
+                raise ValueError("必记项标题需要 1–160 个字符")
+            item = {"kind": values["kind"], "title": title,
+                    "reason": values.get("reason", "")[:500]}
+            self.requirements.append(item)
+            return item | {"required": True}
         if name == "remember":
             return self.store.remember(source=self.task_id, **values)
         if name == "clue_done":

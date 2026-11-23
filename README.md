@@ -229,6 +229,12 @@ aiverywhere skill --info
 
 ## 使用
 
+### 工作流模块
+
+主 skill 从 `references/workflow/` 按需读取 `plan`、`recall`、`execute`、`extract`、`finish`，不是每个任务都加载五份文档。项目可用 `overrides/<project_key>/workflow/<module>.md` 覆盖前四个模块；`finish` 固定。CLI 的 `aiverywhere workflow list/path/show` 可查看实际生效文件。
+
+用户明确要求记住、设定默认值或纠正记忆时，CLI 模型可先登记 `require_memory`，保存后回读；业务完成但必记项未确认时任务标为 `partial`。
+
 ### 宿主 agent
 
 直接把项目交给宿主，或让它读取：

@@ -179,6 +179,12 @@ aiverywhere skill --info
 
 ## Usage
 
+### Workflow modules
+
+The main skill loads `plan`, `recall`, `execute`, `extract`, and `finish` from `references/workflow/` only when needed; it does not inject all five documents into every task. A project may override the first four under `overrides/<project_key>/workflow/<module>.md`; `finish` is fixed. Use `aiverywhere workflow list/path/show` to inspect the effective files.
+
+When a user explicitly asks to remember, set a default, or correct memory, the CLI model may register `require_memory`, save it, and read it back. A completed business task with an unconfirmed required memory is marked `partial`.
+
 ### Host agent
 
 Point the host at the project skill:

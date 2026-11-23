@@ -4,7 +4,15 @@
 
 ## [Unreleased]
 
-## [0.2.0] - Unreleased
+## [0.3.0] - Unreleased
+
+### Added
+
+- Web 对话支持 Markdown 标题、列表、引用、链接、内联代码和带语言标签/复制按钮的代码块，所有模型文本先转义。
+- Web 对话显示模型返回的 thinking/推理文本，可折叠查看，不写回模型上下文。
+- Web 对话轮询增量文本，运行时显示流式回答和光标；支持 SSE 的 Messages/OpenAI 适配器均会推送增量。
+
+## [0.2.0] - 2026-11-23
 
 ### Added
 

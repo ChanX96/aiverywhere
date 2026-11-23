@@ -156,7 +156,7 @@ class ChatCompletions(Messages):
             raise ValueError("OpenAI 兼容端点返回空内容")
         return {"content": blocks, "stop_reason": self._stop(choice.get("finish_reason"))}
 
-    async def send(self, system: str, messages: list, tools: list) -> dict:
+    async def send(self, system: str, messages: list, tools: list, on_thinking=None) -> dict:
         import httpx
 
         if not self.model:
@@ -172,9 +172,16 @@ class ChatCompletions(Messages):
             raise ValueError(self._http_error(exc)) from exc
         except httpx.RequestError as exc:
             raise ValueError(f"模型请求未完成（{type(exc).__name__}）") from exc
-        return self._response(response.json())
+        data = response.json()
+        choice = (data.get("choices") or [{}])[0] if isinstance(data, dict) else {}
+        message = choice.get("message") if isinstance(choice, dict) else {}
+        reasoning = message.get("reasoning_content") if isinstance(message, dict) else None
+        if reasoning and on_thinking:
+            on_thinking(str(reasoning))
+        return self._response(data)
 
-    async def stream_send(self, system: str, messages: list, tools: list, on_text=None) -> dict:
+    async def stream_send(self, system: str, messages: list, tools: list, on_text=None,
+                          on_thinking=None) -> dict:
         import httpx
 
         if not self.model:
@@ -198,6 +205,8 @@ class ChatCompletions(Messages):
                     event = json.loads(payload_text)
                     for choice in event.get("choices") or []:
                         delta = choice.get("delta") or {}
+                        if delta.get("reasoning_content") and on_thinking:
+                            on_thinking(str(delta["reasoning_content"]))
                         if delta.get("content"):
                             piece = self._openai_content(delta["content"])
                             text.append(piece)

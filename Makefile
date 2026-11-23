@@ -37,6 +37,7 @@ lint:
 	$(BIN)/ruff check .
 	sh -n install.sh
 	for script in skills/aiverywhere/scripts/*.sh tests/shell/memory.sh tests/shell/memory-conformance.sh; do sh -n "$$script" || exit; done
+	if command -v node >/dev/null 2>&1; then node --check src/aiverywhere/integrations/web/static/app.js; fi
 
 check: lint test test-shell
 

@@ -139,7 +139,7 @@ class Messages:
         hint = "；请核对 model、base_url 与工具 schema 是否被该端点接受" if exc.response.status_code == 422 else ""
         return f"模型服务返回 HTTP {exc.response.status_code}（{exc.response.reason_phrase}）{hint}{suffix}"
 
-    async def send(self, system: str, messages: list, tools: list) -> dict:
+    async def send(self, system: str, messages: list, tools: list, on_thinking=None) -> dict:
         import httpx
 
         if not self.model:
@@ -162,6 +162,11 @@ class Messages:
         data = response.json()
         if not isinstance(data, dict) or not isinstance(data.get("content"), list):
             raise ValueError("模型服务返回的内容不符合 Messages 协议")
+        for block in data["content"]:
+            if isinstance(block, dict) and block.get("type") == "thinking" and on_thinking:
+                thought = block.get("thinking") or block.get("text") or ""
+                if thought:
+                    on_thinking(thought)
         # DeepSeek/Anthropic-compatible endpoints may return thinking blocks
         # with provider-specific signatures. They are not part of our tool-loop
         # protocol; retaining a stripped block makes the next request invalid.
@@ -169,7 +174,8 @@ class Messages:
                            if isinstance(block, dict) and block.get("type") in {"text", "tool_use"}]
         return data
 
-    async def stream_send(self, system: str, messages: list, tools: list, on_text=None) -> dict:
+    async def stream_send(self, system: str, messages: list, tools: list, on_text=None,
+                          on_thinking=None) -> dict:
         import httpx
 
         if not self.model:
@@ -203,6 +209,11 @@ class Messages:
                             blocks[index] = {"type": "tool_use", "id": block.get("id"),
                                              "name": block.get("name"), "input": block.get("input") or {},
                                              "_partial": ""}
+                        elif block.get("type") == "thinking":
+                            thought = block.get("thinking") or ""
+                            blocks[index] = {"type": "thinking", "thinking": thought}
+                            if on_thinking and thought:
+                                on_thinking(thought)
                         else:
                             blocks[index] = {"type": block.get("type", "unknown")}
                     elif kind == "content_block_delta":
@@ -214,6 +225,11 @@ class Messages:
                             block["text"] = block.get("text", "") + text
                             if on_text and text:
                                 on_text(text)
+                        elif delta.get("type") == "thinking_delta":
+                            thought = delta.get("thinking", "")
+                            block["thinking"] = block.get("thinking", "") + thought
+                            if on_thinking and thought:
+                                on_thinking(thought)
                         elif delta.get("type") == "input_json_delta":
                             block["_partial"] = block.get("_partial", "") + delta.get("partial_json", "")
                     elif kind == "content_block_stop":
@@ -247,7 +263,7 @@ class Messages:
         return {"content": content, "stop_reason": stop_reason}
 
     async def agentloop(self, task: Task, environment: dict, messages: list, prompt: str, max_turns: int,
-                        checkpoint, on_text=None, context_manager=None):
+                        checkpoint, on_text=None, on_thinking=None, context_manager=None):
         """Advance one Messages task until the model returns final text or exhausts its budget."""
         async with AsyncExitStack() as resources:
             remote = RemoteTools(task.store, task.mcp_servers, resources)
@@ -277,9 +293,11 @@ class Messages:
                     if context_manager.compactions != before:
                         task.compactions += context_manager.compactions - before
                 if on_text is None:
-                    data = await self.send(context, request_messages, tools_now)
+                    data = await self.send(context, request_messages, tools_now,
+                                          on_thinking=on_thinking)
                 else:
-                    data = await self.stream_send(context, request_messages, tools_now, on_text)
+                    data = await self.stream_send(context, request_messages, tools_now, on_text,
+                                                 on_thinking=on_thinking)
                 blocks = data["content"]
                 if any(not isinstance(b, dict) for b in blocks):
                     raise ValueError("无效的模型消息块")
@@ -345,6 +363,7 @@ class Task:
     review_requested: bool = field(default=False, init=False, repr=False)
     status: str = field(default="queued", init=False)
     answer: str = field(default="", init=False)
+    thinking: str = field(default="", init=False)
     error: str = field(default="", init=False)
     warning: str = field(default="", init=False)
     memory_state: str = field(default="not_required", init=False)
@@ -538,8 +557,8 @@ class Task:
 
     async def run(self, prompt: str, provider: Messages | Native | Callable[[], Messages | Native],
                   *, max_turns: int = 12, timeout: int = 180,
-                  checkpoint=None, on_text=None, context_manager=None):
-        self.status, self.answer, self.error = "running", "", ""
+                  checkpoint=None, on_text=None, on_thinking=None, context_manager=None):
+        self.status, self.answer, self.error, self.thinking = "running", "", "", ""
         self.prompt = prompt[:16000]
         self.run_id = uuid4().hex
         self.started = time.time()
@@ -572,6 +591,11 @@ class Task:
                 self.history = [*messages, {"role": "assistant", "content": self.answer}]
             else:
                 kwargs = {"on_text": on_text} if on_text is not None else {}
+                if on_thinking is not None:
+                    def receive_thinking(delta: str):
+                        self.thinking = (self.thinking + delta)[-200_000:]
+                        on_thinking(delta)
+                    kwargs["on_thinking"] = receive_thinking
                 if context_manager is not None:
                     kwargs["context_manager"] = context_manager
                 turns = provider.agentloop(self, environment, messages, prompt, max_turns, checkpoint, **kwargs)

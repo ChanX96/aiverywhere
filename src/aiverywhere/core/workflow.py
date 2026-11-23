@@ -11,7 +11,8 @@ from .store import Store
 MODULES = ("plan", "recall", "execute", "extract", "finish")
 OVERRIDABLE = {"plan", "recall", "execute", "extract"}
 CONTRACT = 1
-_CONTRACT = re.compile(r"(?:契约版本|contract\s+version)\s*[:：]?\s*(\d+)", re.IGNORECASE)
+_CONTRACT = re.compile(
+    r"(?:契约版本|contract\s+version)\s*[:：]?\s*(\d+)(?!\.\d)", re.IGNORECASE)
 
 
 class WorkflowError(ValueError):
@@ -39,14 +40,15 @@ def _contract(text: str) -> int:
 
 def _override_path(store: Store, name: str) -> Path:
     root = override_dir(store)
-    path = root / f"{name}.md"
-    if path.is_file():
-        try:
-            if not path.resolve().is_relative_to(root.resolve()):
-                raise WorkflowError(f"workflow 覆盖文件越界：{path.name}")
-        except OSError as exc:
-            raise WorkflowError(f"workflow 覆盖文件不可读取：{path.name}") from exc
-    return path
+    try:
+        if root.exists() and not root.resolve().is_relative_to(store.home.resolve()):
+            raise WorkflowError("workflow 覆盖目录超出实例范围")
+        path = root / f"{name}.md"
+        if path.is_file() and not path.resolve().is_relative_to(root.resolve()):
+            raise WorkflowError(f"workflow 覆盖文件越界：{path.name}")
+        return path
+    except OSError as exc:
+        raise WorkflowError(f"workflow 覆盖文件不可读取：{name}") from exc
 
 
 def _read(path: Path) -> str:
@@ -70,11 +72,14 @@ def module_info(store: Store, name: str) -> dict:
     row = {"name": name, "source": "default", "path": str(default),
            "contract": version, "compatible": version == CONTRACT,
            "override": None, "ignored_override": None}
-    override = _override_path(store, name)
     if name not in OVERRIDABLE:
-        if override.is_file():
+        # finish is fixed: report an override if present without following a
+        # bad symlink or letting it block the other modules.
+        override = override_dir(store) / f"{name}.md"
+        if override.is_file() or override.is_symlink():
             row["ignored_override"] = str(override)
         return row
+    override = _override_path(store, name)
     if override.is_file():
         override_text = _read(override)
         override_version = _contract(override_text)

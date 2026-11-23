@@ -411,7 +411,8 @@ class Task:
                 try:
                     current = self.store.recall(receipt["entry_id"])
                     found = (current.get("revision") == receipt.get("revision")
-                             and current.get("title") == item["title"])
+                             and current.get("title", "").casefold() == item["title"].casefold()
+                             and (not item.get("text") or current.get("text") == item["text"]))
                 except (OSError, ValueError):
                     found = False
                 if found:
@@ -588,7 +589,7 @@ class Task:
             self.status = "failed"
             self.error = str(exc) or type(exc).__name__
         finally:
-            if self.status in {"completed", "failed"}:
+            if self.status in {"completed", "failed", "cancelled"}:
                 self._finish_memory()
             self.finished = time.time()
             detail = {

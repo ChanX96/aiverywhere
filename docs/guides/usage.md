@@ -240,13 +240,23 @@ aiverywhere --no-network
 <实例>/overrides/<project_key>/workflow/extract.md
 ```
 
-`finish` 固定，不允许覆盖。每个默认模块和覆盖文件都带“契约版本 1”；版本不兼容时 CLI 会报告影响模块并拒绝执行受影响操作。
+`finish` 固定，不允许覆盖，也不能通过 CLI/Web 的 agent 文件接口修改。CLI 模型可用 `read_skill` 按需读取模块；宿主直接读取 bundle 文件。每个默认模块和覆盖文件都带“契约版本 1”；版本不兼容时 CLI 会报告影响模块并拒绝执行受影响操作。
+
+有 CLI 时：
 
 ```sh
 aiverywhere workflow list
 aiverywhere workflow path
 aiverywhere workflow show extract
 ```
+
+仅宿主不需要 CLI，直接运行：
+
+```sh
+sh <skill>/scripts/workflow-path.sh --project .
+```
+
+它会输出实例、`project_key`、默认模块目录和项目覆盖目录。共享或自定义实例再加 `--home <实例>`。
 
 用户明确要求保存、设定默认值或纠正记忆时，CLI 模型可先调用 `require_memory` 登记必记项，再用 `remember` 保存；业务完成但必记项未回读确认时任务标为 `partial`。宿主的等价做法是在 Plan 中记录必记项，并在交付前核对。
 

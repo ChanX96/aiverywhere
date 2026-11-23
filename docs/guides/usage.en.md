@@ -225,13 +225,23 @@ A project can override only the modules it needs:
 <instance>/overrides/<project_key>/workflow/extract.md
 ```
 
-`finish` is fixed and cannot be overridden. Every default and override declares contract version 1; an incompatible override is reported and the affected operation is refused.
+`finish` is fixed, cannot be overridden, and cannot be modified through the CLI/Web agent-file APIs. The CLI model can load modules on demand with `read_skill`; a host reads the bundle files directly. Every default and override declares contract version 1; an incompatible override is reported and the affected operation is refused.
+
+With the CLI:
 
 ```sh
 aiverywhere workflow list
 aiverywhere workflow path
 aiverywhere workflow show extract
 ```
+
+Host-only mode needs no CLI; run:
+
+```sh
+sh <skill>/scripts/workflow-path.sh --project .
+```
+
+It prints the instance, `project_key`, default module directory, and project override directory. Add `--home <instance>` for a shared or custom instance.
 
 When a user explicitly asks to remember something, set a default, or correct memory, the CLI model may register the required item with `require_memory`, then save it with `remember`. If the business result is complete but the required memory cannot be read back, the task is `partial`. A host records the same item in its Plan and checks it before delivery.
 

@@ -55,6 +55,12 @@ def wrap(workspace: Path, argv: list[str], deny: tuple[Path, ...] = ()) -> list[
         return ["/usr/bin/sandbox-exec", "-f", str(profile), *argv]
     if kind == "bubblewrap":
         command = ["bwrap", "--ro-bind", "/", "/", "--bind", str(workspace), str(workspace),
-                   "--tmpfs", "/tmp", "--dev", "/dev", "--proc", "/proc", "--chdir", str(workspace)]
+                   "--tmpfs", "/tmp", "--dev", "/dev", "--proc", "/proc"]
+        for path in deny:
+            if path.is_dir():
+                command.extend(["--tmpfs", str(path)])
+            elif path.is_file():
+                command.extend(["--ro-bind", "/dev/null", str(path)])
+        command.extend(["--chdir", str(workspace)])
         return [*command, *argv]
     raise ValueError("当前系统没有可用的命令隔离后端")

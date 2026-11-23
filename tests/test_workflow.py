@@ -1,3 +1,4 @@
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +14,7 @@ class WorkflowModules(unittest.TestCase):
         root = Path(self.temp.name)
         self.project = root / "project"
         self.project.mkdir()
-        self.store = Store(root / "instance", self.project)
+        self.store = Store(self.project / ".aiverywhere", self.project)
         self.store.initialize()
 
     def override(self, name: str, text: str):
@@ -45,6 +46,17 @@ class WorkflowModules(unittest.TestCase):
         self.assertEqual(finish_row["ignored_override"], str(finish))
         self.assertNotIn("放宽写入", workflow.load_module(self.store, "finish")["text"])
 
+    def test_host_only_path_helper_reports_same_project_key(self):
+        source = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            ["sh", str(source / "skills/aiverywhere/scripts/workflow-path.sh"),
+             "--project", str(self.project), "--home", str(self.store.home)],
+            capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"project_key={self.store.memory.key}", result.stdout)
+        self.assertIn(f"overrides={workflow.override_dir(self.store)}", result.stdout)
+        self.assertIn("default=", result.stdout)
+
     def test_reinstall_keeps_override(self):
         path = self.override("recall", "# recall\n契约版本 1\n\n## 做法\n\n先查项目摘要。\n")
         self.store.initialize()
@@ -59,7 +71,7 @@ class RequiredMemory(unittest.TestCase):
         root = Path(self.temp.name)
         self.project = root / "project"
         self.project.mkdir()
-        self.store = Store(root / "instance", self.project)
+        self.store = Store(self.project / ".aiverywhere", self.project)
         self.store.initialize()
 
     class Provider:
@@ -98,6 +110,34 @@ class RequiredMemory(unittest.TestCase):
         self.assertEqual(task.status, "completed")
         self.assertEqual(task.memory_state, "confirmed")
         self.assertEqual(task.result()["required_memory"][0]["title"], "月报默认单位")
+
+    def test_read_skill_tool_reads_modules_without_project_access(self):
+        from aiverywhere.core.agent import Task
+        from aiverywhere.core.workflow import load_module
+
+        task = Task(self.store)
+        loaded = task.tools.execute("read_skill", {"module": "plan"})
+        self.assertEqual(loaded["source"], "default")
+        self.assertIn("职责与触发", loaded["text"])
+        self.assertEqual(load_module(self.store, "finish")["contract"], 1)
+        worker = Task(self.store, entry="worker")
+        self.assertNotIn("read_skill", worker.tools.active)
+
+    def test_finish_agent_file_cannot_be_written(self):
+        with self.assertRaises(PermissionError):
+            self.store.write_agent_file(
+                "references/workflow/finish.md", "# changed\n", "new")
+
+    def test_remember_tool_can_correct_by_id(self):
+        from aiverywhere.core.agent import Task
+
+        first = self.store.remember("月报单位", "默认用元。", "fact", "acceptance")
+        task = Task(self.store)
+        updated = task.tools.execute("remember", {
+            "id": first["id"], "revision": 1, "kind": "fact",
+            "title": "月报单位", "text": "默认用万元。"})
+        self.assertEqual(updated["revision"], 2)
+        self.assertEqual(self.store.recall(first["id"])["text"], "默认用万元。")
 
     def test_worker_cannot_write_shared_memory(self):
         from aiverywhere.core.agent import Task

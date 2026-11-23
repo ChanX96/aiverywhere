@@ -24,6 +24,27 @@ class HostOnlyInstaller(unittest.TestCase):
             self.assertTrue((project / ".aiverywhere/data/memory/default").is_dir())
             self.assertFalse((home / ".aiverywhere").exists())
 
+    def test_reinstall_preserves_edited_skill_and_installs_workflow(self):
+        source = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            instance = root / "instance"
+            target = instance / "skills/aiverywhere"
+            target.mkdir(parents=True)
+            (target / "SKILL.md").write_text("# user-edited\n")
+            environment = os.environ.copy()
+            environment["HOME"] = str(root / "home")
+            result = subprocess.run(
+                ["sh", str(source / "install.sh"), "--yes", "--no-cli",
+                 "--project", str(project), "--home", str(instance)],
+                capture_output=True, text=True, env=environment, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((target / "SKILL.md").read_text(), "# user-edited\n")
+            self.assertTrue((target / "references/workflow/finish.md").is_file())
+            self.assertIn("保留现有 SKILL.md", result.stdout)
+
     def test_host_only_install_needs_no_python_environment(self):
         source = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:

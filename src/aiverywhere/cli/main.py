@@ -131,6 +131,7 @@ def parser() -> argparse.ArgumentParser:
     put = ops.add_parser("put", help="保存条目；更新时提供现行修订号")
     put.add_argument("title")
     put.add_argument("text")
+    put.add_argument("--id", dest="item_id", help="纠正已有条目的稳定 ID")
     put.add_argument("--revision", type=positive)
     search = ops.add_parser("search", help="按线索查摘要；省略 query 可列当前种类")
     search.add_argument("query", nargs="?", default="")
@@ -172,7 +173,8 @@ def parser() -> argparse.ArgumentParser:
 
 def memory(args, store: Store):
     if args.op == "put":
-        return store.remember(args.title, args.text, args.kind, "user", revision=args.revision)
+        return store.save_entry({}, args.title, args.text, args.kind, "user",
+                                revision=args.revision, item_id=args.item_id)
     if args.op == "search":
         return store.search(args.query, args.kind, cold=args.cold, limit=20 if args.kind == "clue" else 5)
     if args.op == "get":
@@ -452,7 +454,7 @@ async def chat(args, store: Store, provider) -> int:
             raise
         finally:
             try:
-                if candidate.status == "completed":
+                if candidate.status in {"completed", "partial"}:
                     new_messages = candidate.history[history_before:]
                     session.finish_turn(turn_id, new_messages, candidate.answer,
                                         candidate.status)
@@ -800,7 +802,7 @@ async def one(args, store: Store, provider: Messages | Native) -> int:
                     raise ValueError("同一 task-id 已绑定到其他请求")
                 result = previous["result"]
                 output(result, args.json)
-                return 0 if result["status"] in {"running", "completed"} else 1
+                return 0 if result["status"] in {"running", "completed", "partial"} else 1
             task.status = "running"
             jobs[key] = {"project": str(store.project), "signature": signature, "result": task.result(),
                          "pid": os.getpid(), "expires": time.time() + args.timeout + 30}
@@ -852,7 +854,7 @@ async def one(args, store: Store, provider: Messages | Native) -> int:
     if streamed and not args.json:
         result = result | {"answer": ""}
     output(result, args.json)
-    return 0 if task.status == "completed" else 1
+    return 0 if task.status in {"completed", "partial"} else 1
 
 
 async def invoke(args, store: Store) -> int:

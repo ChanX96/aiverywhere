@@ -43,8 +43,10 @@ def _workspace(parent: Task, index: int) -> tuple[Path, dict[str, str]]:
         # the instance itself must never be copied into its own work tree.
         ignored = set(IGNORE(directory, names))
         base = Path(directory).resolve()
-        if base == project and home == project and "config.json" in names:
-            ignored.add("config.json")
+        if base == project and home == project:
+            for name in ("config.json", "data", "skills", "overrides", "work", ".aiverywhere"):
+                if name in names:
+                    ignored.add(name)
         for candidate in (home, target):
             try:
                 relative = candidate.relative_to(base)

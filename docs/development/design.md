@@ -81,13 +81,14 @@
 | `data/state.json` | 计划、任务认领和渠道回执；不再保存记忆正文。 |
 | `data/logs/` | 按任务保存的摘要和回执，避免共享追加文件。 |
 | `data/artifacts/` | worker 或任务产物。 |
+| `overrides/<project_key>/workflow/` | 项目级工作流覆盖；`finish` 固定，不受覆盖。 |
 | `work/` | 可回收的 worker 私有工作区。 |
 | `data/.lock` | CLI 所有进程共用的文件锁；Shell 宿主使用自己的原子/冲突回执。 |
 | `data/artifacts/` | worker 交回并保留的产物；主任务核验后通过 `accept_artifact` 写入项目。 |
 | `work/<主任务>/<worker>/` | 可回收的 worker 私有工作区；真实项目、配置和其他 worker 不在此范围。 |
 | `venv/` | 安装器管理的运行环境，不属于用户数据。 |
 
-`init` 在实例锁内把旧版 `data/config.json` 原子迁移到实例根 `config.json`；新旧配置同时存在且内容不同时报冲突，不静默覆盖。`config.json`、`data/` 和 `skills/aiverywhere/` 一起备份即可带走实例。
+`init` 在实例锁内把旧版 `data/config.json` 原子迁移到实例根 `config.json`；新旧配置同时存在且内容不同时报冲突，不静默覆盖。`config.json`、`data/`、`skills/aiverywhere/` 和 `overrides/` 一起备份即可带走实例。
 
 项目技能链接位于 `<项目>/.agents/skills/aiverywhere`，指向标准 skill bundle 目录；旧 `SKILL.md` 文件链接可迁移。它只是宿主导入路径，也可用于从项目反向定位自定义安装根。`web` 用 Python 标准库在 IPv4 回环地址提供本地工作台。操作员可在“对话与工作”提交任务、查看工具回执，检索和编辑当前项目的记忆与技能、查看和修订实例级 agent、分页浏览当前项目的日志。对话会话保存在当前 web 进程内，后端线程执行任务，前端轮询状态；默认只读，写入、命令和联网分别由 Task 权限字段控制。删除条目需确认，写入和删除核对当前修订。删除本地 agent 修订后可以从模板恢复。配置可能包含凭据，只通过本机文件配置。页面按资源提供操作，避免直接改写含有任务状态的整个快照。浏览器对话与微信渠道分别验收。
 

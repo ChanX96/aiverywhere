@@ -23,21 +23,21 @@ description: 在任意宿主或终端中处理代码、文档和日常任务；�
 
 | 模块 | 何时读取 |
 | --- | --- |
-| [plan](references/workflow/plan.md) | 接收任务、目标变化；明确交付物、权限、必记项 |
+| [plan](references/workflow/plan.md) | 复杂任务或目标变化；明确交付物、权限、必记项 |
 | [recall](references/workflow/recall.md) | 依赖历史决定、项目约定或已学方法 |
 | [execute](references/workflow/execute.md) | 需要行动、查证、产物或委派 |
 | [extract](references/workflow/extract.md) | 出现纠正、新事实、可复用方法或线索 |
-| [finish](references/workflow/finish.md) | 交付前核对必记项与实际回执 |
+| [finish](references/workflow/finish.md) | 有必记项或需要核对收尾时 |
 
-模块是职责划分，不是额外的模型调用。简单问答可以零检索、零 worker、零长期写入；明确要求记住的内容直接进入提交。
+模块是职责划分，不是额外的模型调用。没有必记项、无需行动和收尾核对的简单问答，不读取任何模块；它零检索、零 worker、零长期写入。明确要求记住的内容直接进入提交。
 
-模块默认文件在 `references/workflow/`。项目可以只覆盖 `plan`、`recall`、`execute`、`extract` 中需要的文件：
+模块默认文件在 `references/workflow/`。宿主直接读取文件；CLI 工具列表提供 `read_skill` 时，用它按需读取共享实例或项目覆盖，避免把五份正文一次注入。项目可以只覆盖 `plan`、`recall`、`execute`、`extract` 中需要的文件：
 
 ```text
 <instance>/overrides/<project_key>/workflow/<module>.md
 ```
 
-`finish` 固定。覆盖文件保留相同的“契约版本 1”和文档分区；版本不兼容时说明模块并暂停受影响操作。项目本地实例通常 `project_key=default`；使用 CLI 时可用 `aiverywhere workflow path` 或 `aiverywhere workflow show <module>` 查看实际生效文件。
+`finish` 固定。覆盖文件保留相同的“契约版本 1”和文档分区；版本不兼容时说明模块并暂停受影响操作。项目本地实例通常 `project_key=default`。无 CLI 时运行 `sh <skill>/scripts/workflow-path.sh --project <项目>` 查看默认目录、项目 key 和覆盖目录；共享或自定义实例再加 `--home <实例>`。有 CLI 时也可用 `aiverywhere workflow path` 或 `aiverywhere workflow show <module>`。
 
 ## 明确记忆要求
 

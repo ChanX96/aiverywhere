@@ -3,12 +3,13 @@ VENV ?= .venv
 BIN := $(VENV)/bin
 PY := $(BIN)/python
 
-.PHONY: help venv install test test-shell lint build check clean
+.PHONY: help venv install test test-shell acceptance lint build check clean
 
 help:
 	@printf '%s\n' \
 	  'make install  创建 .venv 并安装开发依赖' \
 	  'make test     运行标准库 unittest' \
+	  'make acceptance 运行十个 CLI/宿主验收场景' \
 	  'make lint     运行 ruff 和安装脚本语法检查' \
 	  'make check    lint + test' \
 	  'make build    构建 sdist 与 wheel' \
@@ -28,6 +29,9 @@ test:
 test-shell:
 	sh tests/shell/memory.sh
 	sh tests/shell/memory-conformance.sh
+
+acceptance:
+	$(PY) -m unittest tests.test_acceptance_matrix -v
 
 lint:
 	$(BIN)/ruff check .

@@ -303,6 +303,20 @@ A long-running raw Messages CLI rereads the current agent before every model req
 
 The model recalls only the small amount of memory needed for the current task. To require confirmation before using a verified skill across projects, set `aiverywhere memory policy ask`; after the user agrees, pass the global `--confirm-shared` for that one call. Ordinary project facts stay in their source project.
 
+## Host adoption and migration
+
+Ordinary skill invocation is still the default. `aiverywhere adopt detect` only inspects the project and existing rule files. `aiverywhere adopt enable --yes --file AGENTS.md` writes a marked, reversible block only after the user explicitly agrees; `disable` removes only that block. The choice is stored in project settings, separate from long-term memory, and is re-asked on another project or machine.
+
+Migration uses one format:
+
+```sh
+aiverywhere migrate export --output ./my-agent.aiv.tar.gz
+aiverywhere migrate inspect ./my-agent.aiv.tar.gz
+aiverywhere migrate import ./my-agent.aiv.tar.gz
+```
+
+The package carries the active skill, workflow overrides, and memory-v1 only. Its manifest verifies paths, sizes, and SHA-256; conflicts keep local data. Configuration, credentials, sessions, logs, the venv, and host-adoption consent are not activated by import.
+
 ## Idle Dream
 
 Dream is an ordinary task, not a dedicated loop. When there is no new user task, the host uses its own model and starts with `aiverywhere memory search --kind clue`; with no clues it stops without calling a model. With clues, it follows the self-questioning checklist in the [working agreement](../../skills/aiverywhere/SKILL.md), writes a fact/skill only when the evidence is sufficient, and marks processed clues with `memory forget`; otherwise the clues remain.

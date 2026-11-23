@@ -236,6 +236,12 @@ Agent 页面编辑完整 bundle：`SKILL.md`、`references/*.md|json`、`scripts
 
 CLI 的 `require_memory` 登记本次必记项，`remember` 成功后按 ID/revision 回读；业务完成但必记项未确认时任务标为 `partial`。worker 共享父任务 Store，但工具层禁止直接写共享记忆，只交回候选。
 
+### 宿主接入、运行中输入与迁移
+
+普通 skill 是默认入口。首次安装或导入后，agent 检查项目实际规则文件并询问是否加入可撤销的引导块；只有用户明确同意才写入，拒绝、未回答和无人值守安装保持普通模式。`overrides`、接入状态和运行输入都不进入长期记忆。
+
+运行中的普通输入进入当前 Task 的下一决策点；需要人工决定时使用 `ask_user`，通过会话/运行请求 ID 绑定答案。CLI/Web 共享任务状态，不新增第二个前台循环。迁移包只带活动 skill、workflow 覆盖和 memory-v1，带 SHA-256 清单，导入先暂存校验，冲突不覆盖本地。
+
 ### 常驻 supervisor 与通用通道
 
 CLI 默认确保一个单实例 supervisor 运行。它持有实例内的 PID/端口/token/日志，托管本地 Web 和 channel worker；CLI 退出不会终止它。`aiverywhere start/stop/status` 显式管理，不注册系统服务。

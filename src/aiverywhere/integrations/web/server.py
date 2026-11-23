@@ -191,6 +191,9 @@ def create_server(store: Store, port: int, token: str | None = None) -> Threadin
             if path == "/api/chat/reset" and self.command == "POST":
                 data = self.body()
                 return self.reply(200, chat.reset(data.get("session")))
+            if path == "/api/chat/input" and self.command == "POST":
+                data = self.body()
+                return self.reply(202, chat.provide(data.get("session"), data.get("text")))
             if read and RUN_PATH.fullmatch(path):
                 run_id = RUN_PATH.fullmatch(path)[1]
                 try:

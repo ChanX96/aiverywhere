@@ -61,6 +61,20 @@ class ChatSessions:
                     "started": record["started"], "writable": writable,
                     "exec": exec_allowed, "network": network_allowed, "new_session": new}
 
+    def provide(self, session: str, text: str) -> dict:
+        if not isinstance(session, str) or not SESSION.fullmatch(session):
+            raise ValueError("会话标识无效")
+        if not isinstance(text, str) or not text.strip() or len(text) > 8000:
+            raise ValueError("补充内容需要 1–8000 个字符")
+        with self.lock:
+            record = self.records.get(session)
+            if record is None or not record["thread"] or not record["thread"].is_alive():
+                raise ValueError("当前没有运行中的任务")
+            task = record["task"]
+        outcome = task.provide(text.strip())
+        return {"session": session, "accepted": True, "outcome": outcome,
+                "task_id": task.id}
+
     def _run(self, record: dict, message: str, limits: dict) -> None:
         task = record["task"]
         def append(field: str, delta: str) -> None:

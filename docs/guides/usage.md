@@ -183,6 +183,7 @@ aiverywhere chat --resume <session-id>
 /sessions            列出当前项目 session（含名称和最近更新时间）
 /status              session、turn 数、token 估算、摘要和待办
 /todos               查看任务清单和完成情况
+/thinking            展开或折叠思考摘要
 /compact             手动压实当前上下文
 ```
 
@@ -269,7 +270,7 @@ sh <skill>/scripts/workflow-path.sh --project .
 
 交互式 TTY 中输入 `/` 会显示命令补全菜单：`/help`、`/new`、`/resume`、`/sessions`、`/status`、`/todos`、`/compact`、`/permissions`、`/grant`、`/revoke`、`/jobs`、`/cancel`、`/ask`、`/quit`。
 
-非 JSON 的交互和一次性运行会流式显示正文；`--json` 保持一份最终回执。Ctrl+C 取消当前主任务；TTY 任务结束后重新显示提示符。非 TTY 输入仍可用 `/cancel`，`/cancel <worker-id>` 取消指定 worker。已完成产物仍可查；外部操作结果未知时保留待核对状态。
+运行中直接输入会作为当前任务的补充，`/next` 排到下一任务；需要人工决定时显示问题并等待答复。TTY 的思考摘要默认折叠，`/thinking` 切换；非 JSON 的交互和一次性运行会流式显示正文；`--json` 保持一份最终回执。Ctrl+C 取消当前主任务；TTY 任务结束后重新显示提示符。非 TTY 输入仍可用 `/cancel`，`/cancel <worker-id>` 取消指定 worker。已完成产物仍可查；外部操作结果未知时保留待核对状态。
 
 ## 记忆、技能和本地工作台
 
@@ -318,6 +319,20 @@ Web 对话输入框支持 `/` 命令菜单：`/help`、`/new`、`/status`、`/se
 “运行日志”按时间从新到旧展示当前项目的任务，可加载更早记录；点击任务 ID 查看该条执行详情，概览的统计卡和“运行记录”链接可直接进入日志页。`events.jsonl` 只保存摘要；每次运行另写入权限 `0600` 的 `data/runs/<hash>.json`，包含提示词、答复、错误和工具参数/截断结果。旧任务没有 trace，只显示摘要。运行记录是本地敏感数据，不要把 `data/` 提交到仓库。工作台绑定 `127.0.0.1`，只接受本机同源请求并校验页面令牌；前端资源随包分发，全程可离线使用。`--port 0` 可选取空闲端口。`aiverywhere web` 会确保 supervisor 运行并打印/打开地址，不阻塞终端；`--no-open` 只打印地址。
 
 模型按本次任务需要取回少量记忆。要逐次确认跨项目使用已验证技能，可设 `aiverywhere memory policy ask`，用户同意后用单次全局参数 `--confirm-shared`。普通项目事实留在其来源项目。
+
+## 宿主接入与迁移
+
+默认仍是普通 skill 调用。`aiverywhere adopt detect` 只读检查当前项目和已有规则文件；`aiverywhere adopt enable --yes --file AGENTS.md` 只在用户明确同意后写入带标记的引导块，`disable` 只撤销该块。接入选择保存在实例项目设置中，不属于长期记忆，换机器/项目重新询问。
+
+迁移包使用统一格式：
+
+```sh
+aiverywhere migrate export --output ./my-agent.aiv.tar.gz
+aiverywhere migrate inspect ./my-agent.aiv.tar.gz
+aiverywhere migrate import ./my-agent.aiv.tar.gz
+```
+
+包内只包含活动 skill、workflow 覆盖和 memory-v1；清单校验路径、大小和 SHA-256，冲突不覆盖本地数据。配置、凭据、会话、日志、venv 和宿主接入同意不随包启用。
 
 ## 空闲 Dream
 

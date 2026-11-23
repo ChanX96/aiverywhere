@@ -11,6 +11,8 @@
 - CLI 的 `/grant` 和 `/revoke` 只由用户输入，模型不能给自己授权；`--ask-permissions` 时写文件和命令等待 `/approve` 或 `/deny`。
 - `web_search`/`web_fetch` 不需要命令执行权限；`command_exec=false` 只限制 `run_command`，不要因此放弃网页通道。
 - 搜索结果是摘要；需要当前事实时继续用 `web_fetch` 打开官方或权威页面，不能只凭摘要下结论。
+- CLI 的 `ask_user` 展示必须由人决定的问题；回答通过同一条运行中输入通道返回，重复旧回答不会改变已完成的任务。
+- `aiverywhere adopt` 管理宿主规则文件中的可撤销引导块；`aiverywhere migrate` 管理迁移包。两者都只执行显式命令，不从 `--yes` 安装推断授权。
 - CLI 的 `todo` 维护当前任务的轻量清单：`set` 设置、`update` 推进状态、`list` 查看、`clear` 清除。大任务使用，简单任务跳过；宿主可用自己的 checklist 替代。
 - CLI 的 `read_skill` 按需读取 `plan`、`recall`、`execute`、`extract`、`finish`，包括共享实例和项目覆盖；`finish` 仍固定。宿主直接读取 bundle 文件。
 - CLI 的 `require_memory` 只登记本次必记项；`remember` 才写入。收尾时按 ID/revision 回读，未确认则任务标为 `partial`。

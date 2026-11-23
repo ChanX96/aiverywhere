@@ -13,6 +13,7 @@ PROJECT_DIR="$PWD"
 BIN_DIR="${AIVERYWHERE_BIN_DIR:-$HOME/.local/bin}"
 VENV="${AIVERYWHERE_VENV:-}"
 SOURCE="${AIVERYWHERE_SOURCE:-}"
+IMPORT_FILE=""
 WITH_CLI="ask"
 LINK="ask"
 ASSUME_YES=0
@@ -35,6 +36,7 @@ usage() {
   --bin-dir DIR      命令链接目录（默认 ~/.local/bin）
   --source TARGET    pip 安装源：本地目录、wheel 或 Python 包名
   --ref REF          从 GitHub 获取的分支或标签（默认 main）
+  --import PACKAGE   安装后导入迁移包（宿主模式需要 jq）
   --no-link          不创建项目技能链接
   --dry-run          只打印将执行的命令
   -h, --help         显示本帮助
@@ -157,6 +159,11 @@ while [ $# -gt 0 ]; do
             [ $# -gt 0 ] || fail "--ref 需要分支或标签"
             REF=$1
             ;;
+        --import)
+            shift
+            [ $# -gt 0 ] || fail "--import 需要迁移包路径"
+            IMPORT_FILE=$1
+            ;;
         --no-link) LINK="no" ;;
         --dry-run) DRY_RUN=1 ;;
         -h|--help) usage; exit 0 ;;
@@ -253,6 +260,11 @@ if [ "$WITH_CLI" = "no" ]; then
             AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/init-instance.sh" "$PROJECT_DIR" ||
                 fail "初始化实例失败"
         fi
+        if [ -n "$IMPORT_FILE" ]; then
+            AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/import-migration.sh" \
+                --package "$IMPORT_FILE" --project "$PROJECT_DIR" --home "$HOME_DIR" ||
+                fail "迁移包导入失败：$IMPORT_FILE"
+        fi
     fi
     note ""
     note "aiverywhere 宿主安装完成；未安装 Python 或 CLI"
@@ -321,6 +333,11 @@ if [ -f "$skill_source/SKILL.md" ]; then
             AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/init-instance.sh" "$PROJECT_DIR" ||
                 fail "初始化实例失败"
         fi
+        if [ -n "$IMPORT_FILE" ]; then
+            AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/import-migration.sh" \
+                --package "$IMPORT_FILE" --project "$PROJECT_DIR" --home "$HOME_DIR" ||
+                fail "迁移包导入失败：$IMPORT_FILE"
+        fi
     fi
 else
     note "未找到本地 skill bundle；CLI 将退回到原来的 Python 技能初始化"
@@ -360,6 +377,10 @@ run "$BIN" --home "$HOME_DIR" --project "$PROJECT_DIR" init ||
 if [ "$LINK" = "yes" ]; then
     run "$BIN" --home "$HOME_DIR" --project "$PROJECT_DIR" link ||
         fail "技能链接失败。请检查项目中是否已有同名技能文件"
+fi
+if [ -n "$IMPORT_FILE" ]; then
+    run "$BIN" --home "$HOME_DIR" --project "$PROJECT_DIR" migrate import "$IMPORT_FILE" ||
+        fail "迁移包导入失败：$IMPORT_FILE"
 fi
 
 if [ "$WITH_CLI" = "yes" ]; then

@@ -76,6 +76,9 @@ NATIVE = [
          {"url": TEXT}, ("url",)),
     DELEGATE,
     ACCEPT,
+    tool("ask_user", "向用户展示一个必须由人决定的问题，等待答复后继续 / ask the user for a decision",
+         {"question": TEXT, "options": ARRAY, "allow_freeform": {"type": "boolean"}},
+         ("question",)),
     tool("todo", "维护当前任务的待办清单；大任务先 set，执行中 update，完成后标记 completed / maintain the task checklist",
          {"action": {"type": "string", "enum": ["set", "update", "clear", "list"]},
           "items": ARRAY, "id": TEXT, "text": TEXT,
@@ -169,9 +172,9 @@ class Tools:
         if not agent_edit:
             self.available.pop("revise_agent", None)
         if not self.memory_writable:
-            for name in ("read_skill", "require_memory", "remember", "clue_done", "share_skill", "used_skill"):
+            for name in ("read_skill", "ask_user", "require_memory", "remember", "clue_done", "share_skill", "used_skill"):
                 self.available.pop(name, None)
-        direct = {"read_file", "list_files", "search_files", "recall", "read_skill", "todo",
+        direct = {"read_file", "list_files", "search_files", "recall", "read_skill", "ask_user", "todo",
                   "require_memory", "remember", "write_file",
                   "edit_file", "run_command", "web_search", "web_fetch", "revise_agent"}
         if allow_workers:

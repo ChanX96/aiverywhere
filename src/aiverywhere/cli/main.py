@@ -96,6 +96,24 @@ def parser() -> argparse.ArgumentParser:
     workflow_ops.add_parser("path", help="输出默认模块与覆盖目录")
     show_workflow = workflow_ops.add_parser("show", help="读取实际生效的模块正文")
     show_workflow.add_argument("module", choices=("plan", "recall", "execute", "extract", "finish"))
+    migrate = sub.add_parser("migrate", help="导出、检查或导入 AIVERYWHERE 迁移包")
+    migrate_ops = migrate.add_subparsers(dest="op", required=True)
+    migrate_export = migrate_ops.add_parser("export", help="导出 skill、workflow 覆盖和记忆")
+    migrate_export.add_argument("--output", type=Path, default=Path("my-agent.aiv.tar.gz"))
+    migrate_export.add_argument("--force", action="store_true", help="覆盖已有目标文件")
+    migrate_inspect = migrate_ops.add_parser("inspect", help="只读检查迁移包")
+    migrate_inspect.add_argument("package", type=Path)
+    migrate_import = migrate_ops.add_parser("import", help="安全导入迁移包")
+    migrate_import.add_argument("package", type=Path)
+    adopt = sub.add_parser("adopt", help="查看或管理宿主免点名接入")
+    adopt_ops = adopt.add_subparsers(dest="op", required=True)
+    adopt_ops.add_parser("detect", help="只读检查当前项目和宿主规则文件")
+    adopt_ops.add_parser("status", help="查看已保存的接入选择")
+    adopt_enable = adopt_ops.add_parser("enable", help="写入可撤销的宿主引导块")
+    adopt_enable.add_argument("--file", choices=("AGENTS.md", "CLAUDE.md", ".cursor/rules/aiverywhere.mdc"))
+    adopt_enable.add_argument("--host")
+    adopt_enable.add_argument("--yes", action="store_true", help="确认写入用户规则文件")
+    adopt_ops.add_parser("disable", help="只撤销 AIVERYWHERE 管理的引导块")
     start = sub.add_parser("start", help="启动常驻 supervisor 和 Web")
     start.add_argument("--port", type=int, choices=range(0, 65536), metavar="0-65535")
     sub.add_parser("stop", help="停止常驻 supervisor")
@@ -273,6 +291,7 @@ SLASH_COMMANDS = (
     ("/sessions", "列出当前项目的 session"),
     ("/status", "当前 session、上下文预算和待办"),
     ("/todos", "查看当前任务清单与完成情况"),
+    ("/thinking", "切换思考摘要展开：/thinking"),
     ("/compact", "手动压实当前上下文"),
     ("/permissions", "查看本次 session 的授权"),
     ("/grant", "授予本 session 权限：/grant write|exec|network"),
@@ -325,6 +344,68 @@ def activity_event(event: dict, *, enabled: bool) -> None:
     detail = event.get("error") or ""
     print(f"\n[{kind}] {event.get('label', event.get('name', ''))} {status}{suffix}" +
           (f" · {detail[:120]}" if detail else ""), file=sys.stderr, flush=True)
+
+
+def question_event(event: dict) -> None:
+    print(f"\n[需要你的决定] {event.get('question', '')}", file=sys.stderr, flush=True)
+    for index, option in enumerate(event.get("options") or [], 1):
+        print(f"  {index}. {option}", file=sys.stderr, flush=True)
+    print("  直接输入决定，或 /next 排队；/cancel 取消任务。", file=sys.stderr, flush=True)
+
+
+class TerminalStream:
+    """Small terminal renderer: folded thinking, clean segment breaks, timing."""
+
+    def __init__(self, setting: dict):
+        self.setting = setting
+        self.started = time.monotonic()
+        self.thought = []
+        self.thinking_started = False
+        self.text_started = False
+        self.summary_printed = False
+
+    def _summary(self):
+        if self.summary_printed or not self.thought:
+            return
+        self.summary_printed = True
+        elapsed = max(0.0, time.monotonic() - self.started)
+        print(f"\n▸ 思考摘要 · {elapsed:.1f} 秒\n", file=sys.stderr, flush=True)
+
+    def thinking(self, delta: str):
+        if not delta:
+            return
+        self.thought.append(delta)
+        if self.setting.get("show"):
+            if not self.thinking_started:
+                self._summary()
+                print("思考过程：\n", file=sys.stderr, flush=True)
+                self.thinking_started = True
+            color = "" if os.environ.get("NO_COLOR") else "\033[2;37m"
+            reset = "" if not color else "\033[0m"
+            sys.stderr.write(color + delta + reset)
+            sys.stderr.flush()
+
+    def text(self, delta: str):
+        if not delta:
+            return
+        if not self.text_started:
+            self._summary()
+            self.text_started = True
+        sys.stdout.write(delta)
+        sys.stdout.flush()
+
+    def activity(self, event: dict):
+        if self.text_started:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            self.text_started = False
+        activity_event(event, enabled=True)
+
+    def finish(self):
+        if self.text_started:
+            print(flush=True)
+            self.text_started = False
+        self._summary()
 
 
 async def chat(args, store: Store, provider) -> int:
@@ -411,32 +492,34 @@ async def chat(args, store: Store, provider) -> int:
         else:
             message("当前没有待处理的权限请求。")
 
+    thinking_setting = {"show": False}
+
     async def execute(candidate: Task, prompt: str):
         streamed = False
-        if not args.json and sys.stdout.isatty():
+        renderer = TerminalStream(thinking_setting) if not args.json and sys.stdout.isatty() else None
+        if renderer is not None:
             def worker_event(event):
                 action = f" · {event['action']}" if event.get("action") else ""
                 print(f"\n[worker {event.get('id')}] {event.get('status')}{action}  {event.get('description', '')}",
                       file=sys.stderr, flush=True)
             candidate.worker_callback = worker_event
-            candidate.activity_callback = lambda event: activity_event(
-                event, enabled=not args.json and sys.stdout.isatty())
+            candidate.activity_callback = renderer.activity
+            candidate.question_callback = question_event
 
         def on_text(delta: str):
             nonlocal streamed
             if not delta:
                 return
             streamed = True
-            sys.stdout.write(delta)
-            sys.stdout.flush()
+            if renderer is not None:
+                renderer.text(delta)
+            else:
+                sys.stdout.write(delta)
+                sys.stdout.flush()
 
         def on_thinking(delta: str):
-            if not delta or args.json or not sys.stdout.isatty():
-                return
-            color = "" if os.environ.get("NO_COLOR") else "\033[2;37m"
-            reset = "" if not color else "\033[0m"
-            sys.stderr.write(color + delta + reset)
-            sys.stderr.flush()
+            if renderer is not None:
+                renderer.thinking(delta)
 
         emit(event="accepted", task_id=candidate.id, status="queued")
         emit(event="start", task_id=candidate.id, status="running")
@@ -450,7 +533,9 @@ async def chat(args, store: Store, provider) -> int:
             # Task.run has already recorded the cancelled status and audit row.
             pass
         finally:
-            if streamed:
+            if renderer is not None:
+                renderer.finish()
+            elif streamed:
                 print(flush=True)
         result = candidate.result()
         if streamed and not args.json:
@@ -543,7 +628,7 @@ async def chat(args, store: Store, provider) -> int:
     help_text = ("多轮会话：每行续接当前 session，输入 / 显示命令菜单。"
                  "/help 帮助、/new 新会话、/resume 恢复、/sessions 列表、"
                  "/compact 压实、/rename 重命名、/permissions 权限、/grant 或 /revoke 授权、"
-                 "/approve 或 /deny 处理权限请求、/status 状态、/todos 任务清单、"
+                 "/approve 或 /deny 处理权限请求、/status 状态、/todos 任务清单、/thinking 思考摘要、"
                  "/jobs 任务、/cancel 取消、/ask 追问、/quit 退出。")
 
     def prompt():
@@ -684,6 +769,10 @@ async def chat(args, store: Store, provider) -> int:
                         f"summary={info['summary_method'] or '-'} tokens~{tokens}/{manager.max_tokens} "
                         f"write={grants['write']} exec={grants['exec']} network={grants['network']}")
                 continue
+            if line == "/thinking":
+                thinking_setting["show"] = not thinking_setting["show"]
+                message("思考摘要：" + ("展开" if thinking_setting["show"] else "折叠"))
+                continue
             if line == "/todos":
                 rows = task.todos if task is not None else []
                 if not rows:
@@ -759,8 +848,45 @@ async def chat(args, store: Store, provider) -> int:
                 task_handle = asyncio.create_task(run_turn(target, line))
             current = task_handle
             if prompt_ui is not None:
+                prompt_task = asyncio.create_task(prompt_ui.prompt_async("运行中补充 › "))
+                while not task_handle.done():
+                    done, _ = await asyncio.wait({task_handle, prompt_task},
+                                                 return_when=asyncio.FIRST_COMPLETED)
+                    if prompt_task in done:
+                        try:
+                            incoming = (prompt_task.result() or "").strip()
+                        except (EOFError, KeyboardInterrupt):
+                            incoming = "/cancel"
+                        if incoming in {"/approve", "/deny"}:
+                            resolve_approval(incoming == "/approve")
+                        elif incoming == "/cancel":
+                            task_handle.cancel()
+                        elif incoming == "/quit":
+                            task_handle.cancel()
+                            quitting = True
+                        elif incoming.startswith("/next "):
+                            pending.append(incoming[6:].strip())
+                            message("已排入下一任务。")
+                        elif incoming.startswith("/thinking"):
+                            thinking_setting["show"] = not thinking_setting["show"]
+                            message("思考摘要：" + ("展开" if thinking_setting["show"] else "折叠"))
+                        elif incoming.startswith("/"):
+                            pending.append(incoming)
+                        elif incoming:
+                            try:
+                                outcome = target.provide(incoming)
+                                message("决定已提交。" if outcome == "answer" else "已收到，将并入当前任务。")
+                            except ValueError as exc:
+                                message(str(exc))
+                        if not task_handle.done():
+                            prompt_task = asyncio.create_task(
+                                prompt_ui.prompt_async("运行中补充 › "))
+                if prompt_task is not None and not prompt_task.done():
+                    prompt_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await prompt_task
                 try:
-                    await task_handle
+                    task_handle.result()
                 except asyncio.CancelledError:
                     pass
                 except Exception as exc:
@@ -784,8 +910,17 @@ async def chat(args, store: Store, provider) -> int:
                     elif incoming == "/quit":
                         task_handle.cancel()
                         quitting = True
-                    elif incoming:
+                    elif incoming.startswith("/next "):
+                        pending.append(incoming[6:].strip())
+                        message("已排入下一任务。")
+                    elif incoming.startswith("/"):
                         pending.append(incoming)
+                    elif incoming:
+                        try:
+                            outcome = target.provide(incoming)
+                            message("决定已提交。" if outcome == "answer" else "已收到，将并入当前任务。")
+                        except ValueError as exc:
+                            message(str(exc))
                     if task_handle not in done:
                         continue
                 else:
@@ -846,29 +981,32 @@ async def one(args, store: Store, provider: Messages | Native) -> int:
         task = Task(store, **options)
     streamed = False
 
+    renderer = (TerminalStream({"show": False})
+                if not args.json and sys.stdout.isatty() else None)
+
     def on_text(delta: str):
         nonlocal streamed
         if not delta:
             return
         streamed = True
-        sys.stdout.write(delta)
-        sys.stdout.flush()
+        if renderer is not None:
+            renderer.text(delta)
+        else:
+            sys.stdout.write(delta)
+            sys.stdout.flush()
 
     def on_thinking(delta: str):
-        if not delta or args.json or not sys.stdout.isatty():
-            return
-        color = "" if os.environ.get("NO_COLOR") else "\033[2;37m"
-        reset = "" if not color else "\033[0m"
-        sys.stderr.write(color + delta + reset)
-        sys.stderr.flush()
+        if renderer is not None:
+            renderer.thinking(delta)
 
-    if not args.json and sys.stdout.isatty():
+    if renderer is not None:
         def worker_event(event):
             action = f" · {event['action']}" if event.get("action") else ""
             print(f"\n[worker {event.get('id')}] {event.get('status')}{action}  {event.get('description', '')}",
                   file=sys.stderr, flush=True)
         task.worker_callback = worker_event
-        task.activity_callback = lambda event: activity_event(event, enabled=True)
+        task.activity_callback = renderer.activity
+        task.question_callback = question_event
     handle = asyncio.create_task(task.run(
         prompt, provider, max_turns=args.max_turns, timeout=args.timeout,
         on_text=on_text if not args.json else None,
@@ -891,7 +1029,9 @@ async def one(args, store: Store, provider: Messages | Native) -> int:
             loop.remove_signal_handler(signal.SIGINT)
         except (NotImplementedError, RuntimeError):
             pass
-        if streamed:
+        if renderer is not None:
+            renderer.finish()
+        elif streamed:
             print(flush=True)
         if args.task_id:
             with store.edit() as state:
@@ -978,6 +1118,28 @@ def main(argv=None) -> int:
                 print_json(workflow.paths(store))
             else:
                 print_json(workflow.load_module(store, args.module))
+            return 0
+        if args.command == "migrate":
+            from ..core import migrate
+            if args.op == "export":
+                print_json(migrate.export(store, args.output, force=args.force))
+            elif args.op == "inspect":
+                print_json(migrate.inspect(args.package))
+            else:
+                print_json(migrate.import_package(store, args.package))
+            return 0
+        if args.command == "adopt":
+            from ..core import adoption
+            if args.op == "detect":
+                print_json(adoption.detect(store))
+            elif args.op == "status":
+                print_json(adoption.status(store))
+            elif args.op == "enable":
+                if not args.yes:
+                    raise ValueError("写入宿主规则需要 --yes；用户明确同意后才能执行")
+                print_json(adoption.enable(store, args.file, args.host))
+            else:
+                print_json(adoption.disable(store))
             return 0
         if args.command in {"start", "stop", "status"}:
             from ..core import supervisor

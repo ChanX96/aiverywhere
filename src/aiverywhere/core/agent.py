@@ -271,6 +271,8 @@ class Messages:
             task.tools.active = {k: v for k, v in task.tools.active.items() if not k.startswith("mcp_")}
             checked_memory = None
             for _ in range(max_turns):
+                for incoming in task.drain_inbox():
+                    messages.append({"role": "user", "content": "运行中补充：" + incoming})
                 used = {r["entry_id"]: r["revision"] for r in task.receipts if r.get("ok") and "entry_id" in r}
                 if used:
                     version = file_version(task.store.path), task.store.memory.fingerprint(), used
@@ -351,6 +353,7 @@ class Task:
     worker_limit: int = 2
     worker_callback: Callable[[dict], None] | None = None
     activity_callback: Callable[[dict], None] | None = None
+    question_callback: Callable[[dict], None] | None = None
     id: str = field(default_factory=lambda: uuid4().hex)
     entry: str = "run"
     host: str | None = None
@@ -372,6 +375,10 @@ class Task:
     trace: list = field(default_factory=list, init=False)
     activities: list = field(default_factory=list, init=False)
     todos: list = field(default_factory=list, init=False)
+    inbox: list = field(default_factory=list, init=False)
+    pending_question: dict | None = field(default=None, init=False)
+    _answer_future: object | None = field(default=None, init=False, repr=False)
+    _answer_loop: object | None = field(default=None, init=False, repr=False)
     prompt: str = field(default="", init=False)
     run_id: str = field(default="", init=False)
     started: float = field(default=0.0, init=False)
@@ -406,6 +413,48 @@ class Task:
                 " 查外部工具时传 kind=tool 和已授权的 MCP server。", fields, ("kind",))
         return tools
 
+    def provide(self, text: str) -> str:
+        """Deliver running input, or resolve the currently pending ask_user."""
+        text = str(text).strip()
+        if not text:
+            raise ValueError("补充内容不能为空")
+        if self._answer_future is not None and not self._answer_future.done():
+            future, loop = self._answer_future, self._answer_loop
+            if loop is not None:
+                loop.call_soon_threadsafe(future.set_result, text)
+            else:
+                future.set_result(text)
+            return "answer"
+        self.inbox.append(text[:8000])
+        return "inbox"
+
+    def drain_inbox(self) -> list[str]:
+        values, self.inbox = self.inbox, []
+        return values
+
+    async def ask_user(self, question: str, options: list[str] | None = None) -> str:
+        import asyncio
+        question = str(question).strip()
+        if not question or len(question) > 4000:
+            raise ValueError("问题需要 1–4000 个字符")
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self.pending_question = {"question": question,
+                                 "options": [str(item)[:200] for item in (options or [])][:8]}
+        self._answer_future = future
+        self._answer_loop = loop
+        if self.question_callback is not None:
+            try:
+                self.question_callback(dict(self.pending_question))
+            except Exception:
+                pass
+        try:
+            return await future
+        finally:
+            self.pending_question = None
+            self._answer_future = None
+            self._answer_loop = None
+
     def result(self) -> dict:
         return {"task_id": self.id, "status": self.status, "answer": self.answer,
                 "error": self.error, "warning": self.warning, "receipts": list(self.receipts),
@@ -413,6 +462,7 @@ class Task:
                 "required_memory": list(self.required_memory),
                 "todos": [dict(item) for item in self.todos],
                 "activities": [dict(item) for item in self.activities],
+                "question": dict(self.pending_question) if self.pending_question else None,
                 "agent_revision": self.agent_revision, "compactions": self.compactions,
                 "executor": self.executor_name}
 
@@ -528,6 +578,10 @@ class Task:
                     output = await remote.discover(values["server"], values.get("query", ""), self.tools.active)
                 elif name in remote.selected:
                     output = await remote.call(name, values)
+                elif name == "ask_user":
+                    validate_arguments(self.tools.active[name], values)
+                    answer = await self.ask_user(values["question"], values.get("options") or [])
+                    output = {"answer": answer}
                 elif name == "delegate":
                     validate_arguments(self.tools.active[name], values)
                     output = await self.delegate(values["tasks"])
@@ -612,6 +666,7 @@ class Task:
         self.finished = 0.0
         self.trace = []
         self.activities.clear()
+        self.inbox.clear()
         self.required_memory.clear()
         self.memory_state = "not_required"
         self._receipt_start = len(self.receipts)

@@ -1,14 +1,19 @@
 :root {
   color-scheme: dark;
-  --bg: #0b1118;
-  --rail: #090e14;
-  --surface: #101922;
-  --raised: #141f29;
-  --line: #273541;
-  --muted: #92a5b5;
-  --ink: #e7eef1;
-  --mint: #79e5c3;
-  --amber: #eabf77;
+  --bg: #081321;
+  --rail: #07101d;
+  --surface: #10233a;
+  --raised: #162d49;
+  --line: #284664;
+  --muted: #a6b9d2;
+  --ink: #e8f1ff;
+  --mint: #2563eb;
+  --mint-soft: #83beff;
+  --amber: #ffc66d;
+  --run: #57c7ff;
+  --pending: #ffc66d;
+  --done: #62d6a6;
+  --failed: #ff8a97;
   --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --sans: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   font: 16px/1.55 var(--sans);
@@ -993,6 +998,27 @@ textarea { resize: vertical; }
 .bubble a { color: #8ae8cb; text-decoration: underline; text-underline-offset: 2px; }
 .bubble strong { color: #f4fff9; }
 .bubble .reasoning { margin-bottom: 10px; }
+.decision-card {
+  margin: 0 0 10px;
+  padding: 10px 11px;
+  border: 1px solid #6b5128;
+  border-radius: 6px;
+  background: #241d11;
+  color: #f3dfb5;
+}
+.decision-card p { margin: 0 0 8px; color: #f5e6c8; }
+.decision-card small { display: block; margin-top: 7px; color: #b39b70; font-size: .74rem; }
+.decision-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.decision-actions button {
+  padding: 5px 9px;
+  border: 1px solid #806438;
+  border-radius: 4px;
+  background: #342817;
+  color: #ffe8b6;
+  font-size: .78rem;
+}
+.decision-actions button:hover { border-color: #d5a64f; background: #45361d; }
+
 .stream-answer { min-height: 1.2em; }
 .stream-cursor {
   display: inline-block;
@@ -1409,3 +1435,37 @@ a.stat:hover { border-color: #4d6b78; }
 .bubble .code-block { white-space: normal; }
 .bubble .code-block pre { margin: 0; border: 0; border-radius: 0; max-height: 360px; }
 .bubble .code-block code { padding: 0; background: transparent; font-size: .78rem; }
+
+
+/* 0.5 blue-tech workspace: shared status language and primary action color. */
+.brandmark:before { background: #2563eb; }
+.brandmark:after { background: #83beff; }
+.rail nav a.active { background: #102b4b; border-color: #2d5d91; color: #dcecff; }
+.rail nav a:hover { background: #0d1d31; color: var(--ink); }
+.live-dot, .thinking { color: var(--run); }
+.badge.warn { border-color: #806238; color: var(--pending); background: #2a2416; }
+.badge { border-color: #2b4b6b; color: var(--mint-soft); }
+.primary, .send { background: #2563eb; border-color: #3b82f6; color: #fff; }
+.primary:hover, .send:hover { background: #1d4ed8; border-color: #60a5fa; }
+.secondary:hover, .pill-button:hover { border-color: #4b7eb8; color: #dcecff; background: #112b47; }
+.chat-panel, .panel, .chat-side .panel { background: #10233a; border-color: #284664; }
+.chat-head { background: #0c1c30; border-color: #284664; }
+.chat-stream { background: #081321; }
+.message.user .bubble { background: #14345b; border-color: #356ca8; color: #f1f7ff; }
+.message.assistant .avatar { background: #102b4b; border-color: #356ca8; color: #83beff; }
+.message.user .avatar { background: #2b2113; border-color: #8d6938; color: #ffc66d; }
+.chat-suggestion:hover { background: #102b4b; border-color: #4b7eb8; color: #dcecff; }
+.chat-composer { background: #0c1c30; border-color: #284664; }
+.chat-composer textarea { background: #09182a; border-color: #284664; color: var(--ink); }
+.chat-composer textarea:focus { border-color: #4b7eb8; box-shadow: 0 0 0 2px #1b4f89; }
+.slash-menu { background: #10233a; border-color: #356ca8; }
+.slash-item:hover, .slash-item.active { background: #14355b; }
+.process, .todo-panel, .reasoning { background: #0c1c2d; border-color: #284664; }
+.process > summary, .todo-panel > summary, .activity > summary { color: #a6b9d2; }
+.activity-kind, .activity-state { color: #83a8ce; }
+.activity.running > summary .activity-state { color: var(--run); }
+.activity.error > summary .activity-state, .message .bubble .error { color: var(--failed); }
+.todo-panel li.completed { color: #7288a3; text-decoration-color: #405a78; }
+.todo-panel li.in_progress { color: var(--pending); }
+.code-block, .bubble pre { background: #07111d; border-color: #244466; color: #b9d6f5; }
+.access-note, .session-explain { background: #0d2238; border-color: #284664; }

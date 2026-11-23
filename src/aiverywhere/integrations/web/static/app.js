@@ -162,7 +162,7 @@ const newSessionId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
 
 let chat = {
   session: newSessionId(), messages: [], running: false, writable: false, exec: false, network: true,
-  speed: "normal", started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
+  speed: "normal", nextMessage: "", started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
 };
 
 const webCommands = [
@@ -188,7 +188,7 @@ function autoGrow(input) {
 
 function setChatSend() {
   const send = $("#chat-send"), input = $("#chat-input");
-  if (send) send.disabled = chat.running || !input?.value.trim();
+  if (send) send.disabled = !input?.value.trim();
 }
 
 function chatReceipts(list, detailed = false) {
@@ -390,9 +390,15 @@ function chatThread() {
       const streamed = message.text
         ? `<div class="stream-answer">${richAnswer(message.text)}<span class="stream-cursor"></span></div>`
         : `<div class="thinking"><i></i><i></i><i></i><span>处理中 · ${chatElapsed()}s</span></div>`;
+      const question = message.question
+        ? `<div class="decision-card"><p>${esc(message.question.question)}</p>` +
+          `<div class="decision-actions">${(message.question.options || []).map(option =>
+            `<button type="button" data-action="chat-answer" data-answer="${esc(option)}">${esc(option)}</button>`).join("")}</div>` +
+          `<small>也可以直接在下方输入你的决定</small></div>`
+        : "";
       return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">
-        ${processHtml(message, index)}${streamed}
-        <p class="faint">本地模型正在选择工具并核实结果</p></div></div>`;
+        ${processHtml(message, index)}${question}${streamed}
+        <p class="faint">${question ? "等待你的决定" : "本地模型正在选择工具并核实结果"}</p></div></div>`;
     }
     const body = message.error
       ? `<span class="error">${esc(message.error)}</span>`
@@ -415,7 +421,7 @@ function chatView() {
       <div class="chat-stream" id="chat-stream"></div>
       <form class="chat-composer" id="chat-form">
         <div class="slash-menu" id="chat-slash" role="listbox" aria-label="Web 命令" hidden></div>
-        <textarea id="chat-input" rows="2" maxlength="32000" placeholder="输入任务，或输入 / 查看命令…" aria-label="任务内容" autocomplete="off"></textarea>
+        <textarea id="chat-input" rows="2" maxlength="32000" placeholder="${chat.running ? "补充当前任务，或回答等待中的决定…" : "输入任务，或输入 / 查看命令…"}" aria-label="任务内容" autocomplete="off"></textarea>
         <div class="chat-composer-foot"><span>Enter 发送 · Shift+Enter 换行 · 输入 / 查看命令</span>
           <button class="send" id="chat-send" type="submit" aria-label="发送任务">↑</button></div>
       </form>
@@ -471,8 +477,11 @@ function paintChat() {
   if (mode) mode.textContent = (chat.writable ? "可写项目" : "只读") + (chat.exec ? " · 可执行" : "") + (chat.network ? "" : " · 无网络");
   const badge = $("#chat-mode-badge");
   if (badge) { badge.textContent = chat.writable ? "工作模式" : "只读"; badge.classList.toggle("warn", chat.writable); }
+  const input = $("#chat-input");
+  if (input) input.placeholder = chat.running
+    ? "补充当前任务，或回答等待中的决定…" : "输入任务，或输入 / 查看命令…";
   setChatSend();
-  autoGrow($("#chat-input"));
+  autoGrow(input);
   if (stick) stream.scrollTop = stream.scrollHeight;
 }
 
@@ -501,6 +510,15 @@ function pumpStream(message) {
       clearInterval(message.streamTimer);
       message.streamTimer = null;
       paintChat();
+      if (chat.nextMessage) {
+        const next = chat.nextMessage;
+        chat.nextMessage = "";
+        const input = $("#chat-input");
+        if (input) {
+          input.value = next;
+          sendChat();
+        }
+      }
     }
   }, speed.tick);
 }
@@ -522,6 +540,7 @@ async function pollChat() {
       assistant.thinking = state.thinking || assistant.thinking || "";
       assistant.activities = Array.isArray(state.activities) ? state.activities : assistant.activities;
       assistant.todos = Array.isArray(state.todos) ? state.todos : assistant.todos;
+      assistant.question = state.question || null;
       if (state.status === "running") {
         assistant.streamTarget = state.stream_text || assistant.streamTarget || "";
         assistant.streamDone = false;
@@ -624,6 +643,12 @@ async function runWebCommand(raw) {
   systemMessage(`未知命令：${command}\n输入 /help 查看 Web 命令。`);
 }
 
+async function sendRunningInput(text) {
+  const result = await api("/api/chat/input", "POST", {session: chat.session, text});
+  toast(result.outcome === "answer" ? "决定已提交" : "已收到，将并入当前任务");
+  return result;
+}
+
 async function sendChat() {
   const input = $("#chat-input");
   let message = input?.value.trim();
@@ -634,13 +659,30 @@ async function sendChat() {
     await runWebCommand(message);
     return;
   }
-  if (chat.running) return;
+  if (chat.running && message.startsWith("/next ")) {
+    chat.nextMessage = message.slice(6).trim();
+    input.value = "";
+    setChatSend();
+    toast(chat.nextMessage ? "已排入下一任务" : "下一任务为空");
+    return;
+  }
+  if (chat.running) {
+    try {
+      const result = await api("/api/chat/input", "POST", {session: chat.session, text: message});
+      input.value = "";
+      setChatSend();
+      toast(result.outcome === "answer" ? "决定已提交" : "已收到，将并入当前任务");
+    } catch (error) {
+      toast(error.message, true);
+    }
+    return;
+  }
   if (message.startsWith("//")) message = message.slice(1);
   input.value = "";
   hideSlash();
   chat.messages.push({role: "user", text: message});
   chat.messages.push({role: "assistant", pending: true, text: "", thinking: "",
-    activities: [], todos: [], streamTarget: "", streamDone: false, streamTimer: null,
+    activities: [], todos: [], question: null, streamTarget: "", streamDone: false, streamTimer: null,
     error: "", receipts: []});
   chat.running = true;
   chat.started = Date.now();
@@ -685,7 +727,7 @@ async function resetChat() {
   }
   chat = {
     ...chat, session: newSessionId(), messages: [], running: false, started: 0,
-    task: null, receipts: [], status: null, timer: null, hadSession: false,
+    nextMessage: "", task: null, receipts: [], status: null, timer: null, hadSession: false,
   };
   if (page === "chat") render(); else paintChat();
   return true;
@@ -1030,6 +1072,10 @@ document.addEventListener("keydown", event => {
 $("#view").addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button) return;
+  if (button.dataset.action === "chat-answer") {
+    sendRunningInput(button.dataset.answer).catch(error => toast(error.message, true));
+    return;
+  }
   if (button.classList.contains("code-copy")) {
     const code = button.closest(".code-block")?.querySelector("code");
     if (code && navigator.clipboard) {

@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+## [0.5.0] - Unreleased
+
+### Added
+
+- 宿主免点名接入：`adopt detect/status/enable/disable`，只修改带标记的可撤销引导块，项目设置独立于记忆。
+- 运行中补充输入、`ask_user` 人工决定、Web 决策卡和 CLI 运行中输入；补充内容在下一决策点进入模型上下文。
+- `migrate export/inspect/import`：带 SHA-256 清单的 `my-agent.aiv.tar.gz`，默认只带 skill、workflow 覆盖和记忆，拒绝路径穿越/校验失败。
+- 终端统一渲染：思考摘要默认折叠、`/thinking` 切换、活动/正文换行、计时摘要；Web 回归蓝色科技工作台。
+- `/todos`、任务活动摘要和可折叠过程面板。
+
+### Changed
+
+- 活动回调失败不影响任务内核；迁移和接入状态不新增守护进程或依赖。
+
 ## [0.4.0] - Unreleased
 
 ### Added

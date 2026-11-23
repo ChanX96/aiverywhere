@@ -13,6 +13,7 @@ PROJECT_DIR="$PWD"
 BIN_DIR="${AIVERYWHERE_BIN_DIR:-$HOME/.local/bin}"
 VENV="${AIVERYWHERE_VENV:-}"
 SOURCE="${AIVERYWHERE_SOURCE:-}"
+IMPORT_FILE=""
 WITH_CLI="ask"
 LINK="ask"
 ASSUME_YES=0
@@ -35,6 +36,7 @@ usage() {
   --bin-dir DIR      命令链接目录（默认 ~/.local/bin）
   --source TARGET    pip 安装源：本地目录、wheel 或 Python 包名
   --ref REF          从 GitHub 获取的分支或标签（默认 main）
+  --import PACKAGE   安装后导入 AIVERYWHERE 迁移包（需要 --cli）
   --no-link          不创建项目技能链接
   --dry-run          只打印将执行的命令
   -h, --help         显示本帮助
@@ -202,6 +204,7 @@ esac
 # The host-only path is pure POSIX Shell: copy the skill bundle, bind a project
 # instance, and never create a Python environment.
 if [ "$WITH_CLI" = "no" ]; then
+    [ -z "$IMPORT_FILE" ] || fail "仅宿主安装没有 Python 导入器；请加 --cli 后再导入迁移包"
     case "$LINK" in
         ask) LINK="yes" ;;
     esac
@@ -360,6 +363,10 @@ run "$BIN" --home "$HOME_DIR" --project "$PROJECT_DIR" init ||
 if [ "$LINK" = "yes" ]; then
     run "$BIN" --home "$HOME_DIR" --project "$PROJECT_DIR" link ||
         fail "技能链接失败。请检查项目中是否已有同名技能文件"
+fi
+if [ -n "$IMPORT_FILE" ]; then
+    run "$BIN" --home "$HOME_DIR" --project "$PROJECT_DIR" migrate import "$IMPORT_FILE" ||
+        fail "迁移包导入失败：$IMPORT_FILE"
 fi
 
 if [ "$WITH_CLI" = "yes" ]; then

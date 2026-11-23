@@ -39,11 +39,21 @@ description: 在任意宿主或终端中处理代码、文档和日常任务；�
 
 `finish` 固定。覆盖文件保留相同的“契约版本 1”和文档分区；版本不兼容时说明模块并暂停受影响操作。项目本地实例通常 `project_key=default`。无 CLI 时运行 `sh <skill>/scripts/workflow-path.sh --project <项目>` 查看默认目录、项目 key 和覆盖目录；共享或自定义实例再加 `--home <实例>`。有 CLI 时也可用 `aiverywhere workflow path` 或 `aiverywhere workflow show <module>`。
 
-## 任务清单与过程
+## 宿主免点名接入
+
+普通 skill 调用是默认方式。首次安装、导入或进入新项目后，如果存在可靠的宿主规则文件，先只读检查并问一个具体问题：哪个项目、修改 `AGENTS.md`/`CLAUDE.md` 的哪一份、是新建还是追加、启用后会怎样。用户明确同意后才写入；拒绝、未回答或无人值守安装都保持普通模式，不修改规则文件。不要在 `--yes` 安装时把安装同意当成接入同意。
+
+有 CLI 时使用 `aiverywhere adopt detect` 和 `aiverywhere adopt enable --yes`；人工关闭用 `aiverywhere adopt disable`。没有可靠自动加载入口时保持普通 skill。接入设置按项目保存在实例中，不写入长期记忆；迁移或换项目时不继承。
+
+## 迁移
+
+需要换机器或项目时使用 `aiverywhere migrate export --output ./my-agent.aiv.tar.gz`，新机器先 `inspect` 再 `import`。迁移包只包含活动 skill、workflow 覆盖和记忆；配置、凭据、会话、日志、venv 和宿主接入同意不随之启用。导入前校验清单、范围、校验和与 memory-v1，冲突保留本地数据。
+
+## 任务清单与过程## 任务清单与过程
 
 大任务在 `plan` 后维护一个短清单：CLI 工具列表提供 `todo` 时用 `todo set/update`，宿主使用自己的 checklist 能力；简单任务不要创建清单。范围不清时先生成 checklist 请用户选择或调整，只执行选定项。执行中把清单项推进到 `in_progress`/`completed`，交付时报告未完成项。
 
-CLI 和 Web 的过程记录来自内核统一活动事件，包含每个 tool、Skill/MCP 调用的状态、耗时和摘要；宿主使用自己的子 agent/工具时也按相同粒度交回，不要只写“已完成”。Web 默认折叠过程面板，点击展开；`/todos` 查看 CLI 清单。
+CLI 和 Web 的过程记录来自内核统一活动事件，包含每个 tool、Skill/MCP 调用的状态、耗时和摘要；宿主使用自己的子 agent/工具时也按相同粒度交回，不要只写“已完成”。Web 默认折叠过程面板，点击展开；`/todos` 查看 CLI 清单；终端 `/thinking` 切换思考摘要展开。
 
 ## 明确记忆要求
 

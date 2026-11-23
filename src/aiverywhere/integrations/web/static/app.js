@@ -162,7 +162,7 @@ const newSessionId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
 
 let chat = {
   session: newSessionId(), messages: [], running: false, writable: false, exec: false, network: true,
-  started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
+  speed: "normal", started: 0, task: null, receipts: [], status: null, timer: null, hadSession: false,
 };
 
 const webCommands = [
@@ -395,6 +395,12 @@ function chatView() {
           <input type="checkbox" id="chat-exec" ${chat.exec ? "checked" : ""} aria-label="允许执行项目命令"></label>
         <label class="switch-row"><span><b>允许联网搜索/抓取</b><small>仅当前浏览器会话</small></span>
           <input type="checkbox" id="chat-network" ${chat.network ? "checked" : ""} aria-label="允许联网"></label>
+        <label class="switch-row"><span><b>流式速度</b><small>只影响文字显示，不改变模型</small></span>
+          <select id="chat-speed" class="speed-select" aria-label="流式速度">
+            <option value="slow" ${chat.speed === "slow" ? "selected" : ""}>慢</option>
+            <option value="normal" ${chat.speed === "normal" ? "selected" : ""}>标准</option>
+            <option value="fast" ${chat.speed === "fast" ? "selected" : ""}>快</option>
+          </select></label>
         <p class="faint">关闭时只读。开启后模型可以写入项目或执行命令；切换模式会开始新的上下文。</p>
       </section>
       <section class="panel">
@@ -423,6 +429,40 @@ function paintChat() {
   if (stick) stream.scrollTop = stream.scrollHeight;
 }
 
+const STREAM_SPEEDS = {
+  slow: {tick: 80, base: 1, max: 1},
+  normal: {tick: 45, base: 1, max: 2},
+  fast: {tick: 30, base: 2, max: 6},
+};
+
+function pumpStream(message) {
+  if (message.streamTimer) return;
+  const speed = STREAM_SPEEDS[chat.speed] || STREAM_SPEEDS.normal;
+  message.streamTarget = message.streamTarget || message.text || "";
+  message.streamTimer = setInterval(() => {
+    const target = message.streamTarget || "";
+    if (message.text.length < target.length) {
+      const backlog = target.length - message.text.length;
+      const take = Math.min(speed.max, Math.max(speed.base, Math.ceil(backlog / 80)));
+      message.text = target.slice(0, message.text.length + take);
+      paintChat();
+      return;
+    }
+    if (message.streamDone) {
+      message.streamDone = false;
+      message.pending = false;
+      clearInterval(message.streamTimer);
+      message.streamTimer = null;
+      paintChat();
+    }
+  }, speed.tick);
+}
+
+function stopStream(message) {
+  if (message?.streamTimer) clearInterval(message.streamTimer);
+  if (message) message.streamTimer = null;
+}
+
 async function pollChat() {
   if (!chat.running) return;
   const session = chat.session;
@@ -431,29 +471,40 @@ async function pollChat() {
     if (session !== chat.session) return;
     chat.status = state;
     const assistant = chat.messages[chat.messages.length - 1];
-    if (state.status !== "running") {
-      if (assistant?.role === "assistant" && assistant.pending) {
-        assistant.pending = false;
-        assistant.text = state.answer || assistant.text || "";
-        assistant.thinking = state.thinking || assistant.thinking || "";
+    if (assistant?.role === "assistant" && assistant.pending) {
+      assistant.thinking = state.thinking || assistant.thinking || "";
+      if (state.status === "running") {
+        assistant.streamTarget = state.stream_text || assistant.streamTarget || "";
+        assistant.streamDone = false;
+        pumpStream(assistant);
+      } else {
         assistant.error = state.error || (state.status === "idle" ? "会话状态已重置，请开始新会话。" : "");
         assistant.receipts = Array.isArray(state.receipts) ? state.receipts : [];
+        const answer = state.answer || "";
+        if (answer) {
+          if (assistant.text && !answer.startsWith(assistant.text)) assistant.text = "";
+          assistant.streamTarget = answer;
+          assistant.streamDone = true;
+          pumpStream(assistant);
+        } else {
+          stopStream(assistant);
+          assistant.pending = false;
+        }
       }
+    }
+    if (state.status !== "running") {
       chat.receipts = Array.isArray(state.receipts) ? state.receipts : [];
       chat.running = false;
       paintChat();
       if (assistant?.error) toast(assistant.error, true);
       return;
     }
-    if (assistant?.role === "assistant" && assistant.pending) {
-      assistant.text = state.stream_text || assistant.text || "";
-      assistant.thinking = state.thinking || assistant.thinking || "";
-    }
     paintChat();
-    chat.timer = setTimeout(pollChat, 300);
+    chat.timer = setTimeout(pollChat, 250);
   } catch (error) {
     const assistant = chat.messages[chat.messages.length - 1];
     if (assistant?.role === "assistant") {
+      stopStream(assistant);
       assistant.pending = false;
       assistant.error = error.message;
     }
@@ -539,7 +590,8 @@ async function sendChat() {
   input.value = "";
   hideSlash();
   chat.messages.push({role: "user", text: message});
-  chat.messages.push({role: "assistant", pending: true, text: "", thinking: "", error: "", receipts: []});
+  chat.messages.push({role: "assistant", pending: true, text: "", thinking: "",
+    streamTarget: "", streamDone: false, streamTimer: null, error: "", receipts: []});
   chat.running = true;
   chat.started = Date.now();
   chat.receipts = [];
@@ -573,6 +625,7 @@ async function resetChat() {
     toast("当前任务仍在处理，完成后再开始新会话。", true);
     return false;
   }
+  chat.messages.forEach(stopStream);
   const previous = chat.session;
   try {
     await api("/api/chat/reset", "POST", {session: previous});
@@ -885,6 +938,16 @@ $("#view").addEventListener("change", event => {
   if (event.target.id === "chat-writable") setChatWritable(event.target.checked).catch(e => toast(e.message, true));
   if (event.target.id === "chat-exec") setChatExec(event.target.checked).catch(e => toast(e.message, true));
   if (event.target.id === "chat-network") setChatNetwork(event.target.checked).catch(e => toast(e.message, true));
+  if (event.target.id === "chat-speed") {
+    chat.speed = event.target.value;
+    for (const message of chat.messages) {
+      if (message.streamTimer) {
+        clearInterval(message.streamTimer);
+        message.streamTimer = null;
+        pumpStream(message);
+      }
+    }
+  }
 });
 $("#view").addEventListener("submit", event => {
   if (event.target.id === "chat-form") { event.preventDefault(); sendChat(); }

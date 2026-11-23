@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [0.3.1] - Unreleased
+
+### Fixed
+
+- Web 旧 supervisor 在新 venv 替换后仍持有失效静态资源，重启后恢复。
+- Web 流式文本增加前端字符节流，避免一次跳出整段。
+- 思考过程改为浅灰色可读样式，并保留流式期间自动展开。
+
 ## [0.3.0] - Unreleased
 
 ### Added

@@ -364,7 +364,7 @@ aiverywhere web
 aiverywhere web --no-open
 ```
 
-Web 可以对话；回答按 Markdown 渲染标题、列表、引用、链接、内联代码和带语言标签/复制按钮的代码块，模型返回的思考过程可折叠查看，文本随 SSE/轮询增量显示。用 `/` 命令菜单管理记忆和 skill、编辑完整 Agent bundle、查看历史 CLI session 与带工具参数/结果的运行详情，并按需分别授权写文件、执行命令和联网。一个 Web 绑定一个项目实例；切换项目需在目标项目目录启动 `aiverywhere`。Web 和常驻 worker 由 supervisor 托管；CLI 退出后仍继续运行，直到 `aiverywhere stop`。
+Web 可以对话；回答按 Markdown 渲染标题、列表、引用、链接、内联代码和带语言标签/复制按钮的代码块，模型返回的思考过程以浅灰色可折叠查看，文本随 SSE/轮询增量显示，并可在右侧选择慢/标准/快显示速度。用 `/` 命令菜单管理记忆和 skill、编辑完整 Agent bundle、查看历史 CLI session 与带工具参数/结果的运行详情，并按需分别授权写文件、执行命令和联网。一个 Web 绑定一个项目实例；切换项目需在目标项目目录启动 `aiverywhere`。Web 和常驻 worker 由 supervisor 托管；CLI 退出后仍继续运行，直到 `aiverywhere stop`。
 
 ## 记忆
 

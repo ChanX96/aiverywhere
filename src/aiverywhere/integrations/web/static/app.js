@@ -200,9 +200,123 @@ function chatReceipts(list, detailed = false) {
   }).join("")}</div>`;
 }
 
+function safeHref(value) {
+  const href = String(value || "").trim();
+  if (href.startsWith("//")) return "#";
+  return /^(https?:\/\/|mailto:|\/|#|\.\.?\/)/i.test(href) ? esc(href) : "#";
+}
+
+function inlineMarkdown(text) {
+  const codes = [];
+  let output = text.replace(/`([^`\n]+)`/g, (_, code) => {
+    codes.push(`<code>${code}</code>`);
+    return `\u0000I${codes.length - 1}\u0000`;
+  });
+  const links = [];
+  output = output.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
+    links.push(`<a href="${safeHref(href)}" target="_blank" rel="noreferrer noopener">` +
+      `${inlineMarkdown(label)}</a>`);
+    return `\u0000L${links.length - 1}\u0000`;
+  });
+  output = output.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  output = output.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  output = output.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>");
+  output = output.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, "$1<em>$2</em>");
+  output = output.replace(/\u0000L(\d+)\u0000/g, (_, index) => links[Number(index)]);
+  return output.replace(/\u0000I(\d+)\u0000/g, (_, index) => codes[Number(index)]);
+}
+
+function codeBlockHtml(block) {
+  const language = block.language ? esc(block.language) : "code";
+  return `<div class="code-block"><div class="code-head"><span>${language}</span>` +
+    `<button type="button" class="code-copy">复制</button></div>` +
+    `<pre><code>${esc(block.body)}</code></pre></div>`;
+}
+
+function renderMarkdown(value) {
+  const source = String(value ?? "").replace(/\r\n?/g, "\n");
+  const fences = [];
+  const tokens = source.replace(/```([^\n`]*)\n([\s\S]*?)(?:```|$)/g, (_, language, body) => {
+    const name = language.trim().split(/\s+/)[0].replace(/[^\w+#.-]/g, "");
+    fences.push({language: name, body: body.replace(/^\n+|\n+$/g, "")});
+    return `\u0000F${fences.length - 1}\u0000`;
+  });
+  const lines = esc(tokens).split("\n");
+  const output = [];
+  let paragraph = [];
+  let list = null;
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    output.push(`<p>${inlineMarkdown(paragraph.join("\n")).replace(/\n/g, "<br>")}</p>`);
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (list) output.push(`</${list}>`);
+    list = null;
+  };
+  for (const line of lines) {
+    const fence = line.match(/^\u0000F(\d+)\u0000$/);
+    if (fence) {
+      flushParagraph();
+      closeList();
+      output.push(codeBlockHtml(fences[Number(fence[1])]));
+      continue;
+    }
+    if (!line.trim()) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      closeList();
+      const level = Math.min(heading[1].length, 4);
+      output.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+      flushParagraph();
+      closeList();
+      output.push("<hr>");
+      continue;
+    }
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      closeList();
+      output.push(`<blockquote>${inlineMarkdown(quote[1])}</blockquote>`);
+      continue;
+    }
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      flushParagraph();
+      const tag = unordered ? "ul" : "ol";
+      if (list !== tag) {
+        closeList();
+        list = tag;
+        output.push(`<${tag}>`);
+      }
+      output.push(`<li>${inlineMarkdown((unordered || ordered)[1])}</li>`);
+      continue;
+    }
+    closeList();
+    paragraph.push(line);
+  }
+  flushParagraph();
+  closeList();
+  return output.join("\n");
+}
+
 function richAnswer(value) {
-  return esc(value).replace(/```([\s\S]*?)```/g, (_, body) =>
-    `<pre>${body.replace(/^\n+|\n+$/g, "")}</pre>`).replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  return renderMarkdown(value);
+}
+
+function thinkingHtml(value, live = false) {
+  if (!value) return "";
+  return `<details class="reasoning"${live ? " open" : ""}><summary>思考过程 <small>模型返回的推理文本</small></summary>` +
+    `<div class="reasoning-body">${renderMarkdown(value)}</div></details>`;
 }
 
 function chatEmpty() {
@@ -229,14 +343,19 @@ function chatThread() {
       return `<div class="message user"><div class="avatar">你</div><div class="bubble">${esc(message.text)}</div></div>`;
     }
     if (message.pending) {
+      const reasoning = thinkingHtml(message.thinking || "", true);
+      const streamed = message.text
+        ? `<div class="stream-answer">${richAnswer(message.text)}<span class="stream-cursor"></span></div>`
+        : `<div class="thinking"><i></i><i></i><i></i><span>处理中 · ${chatElapsed()}s</span></div>`;
       return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">
-        <div class="thinking"><i></i><i></i><i></i><span>处理中 · ${chatElapsed()}s</span></div>
+        ${reasoning}${streamed}
         <p class="faint">本地模型正在选择工具并核实结果</p></div></div>`;
     }
+    const reasoning = thinkingHtml(message.thinking || "", true);
     const body = message.error
       ? `<span class="error">${esc(message.error)}</span>`
       : richAnswer(message.text || "（空答复）");
-    return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">${body}${chatReceipts(message.receipts)}</div></div>`;
+    return `<div class="message assistant"><div class="avatar">AI</div><div class="bubble">${reasoning}${body}${chatReceipts(message.receipts)}</div></div>`;
   }).join("");
 }
 
@@ -289,6 +408,7 @@ function chatView() {
 function paintChat() {
   const stream = $("#chat-stream");
   if (!stream) return;
+  const stick = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 90;
   stream.innerHTML = chatThread();
   const receipts = $("#chat-receipts");
   if (receipts) receipts.innerHTML = chat.receipts.length
@@ -300,7 +420,7 @@ function paintChat() {
   if (badge) { badge.textContent = chat.writable ? "工作模式" : "只读"; badge.classList.toggle("warn", chat.writable); }
   setChatSend();
   autoGrow($("#chat-input"));
-  stream.scrollTop = stream.scrollHeight;
+  if (stick) stream.scrollTop = stream.scrollHeight;
 }
 
 async function pollChat() {
@@ -310,11 +430,12 @@ async function pollChat() {
     const state = await api("/api/chat?session=" + encodeURIComponent(session));
     if (session !== chat.session) return;
     chat.status = state;
+    const assistant = chat.messages[chat.messages.length - 1];
     if (state.status !== "running") {
-      const assistant = chat.messages[chat.messages.length - 1];
       if (assistant?.role === "assistant" && assistant.pending) {
         assistant.pending = false;
-        assistant.text = state.answer || "";
+        assistant.text = state.answer || assistant.text || "";
+        assistant.thinking = state.thinking || assistant.thinking || "";
         assistant.error = state.error || (state.status === "idle" ? "会话状态已重置，请开始新会话。" : "");
         assistant.receipts = Array.isArray(state.receipts) ? state.receipts : [];
       }
@@ -324,8 +445,12 @@ async function pollChat() {
       if (assistant?.error) toast(assistant.error, true);
       return;
     }
+    if (assistant?.role === "assistant" && assistant.pending) {
+      assistant.text = state.stream_text || assistant.text || "";
+      assistant.thinking = state.thinking || assistant.thinking || "";
+    }
     paintChat();
-    chat.timer = setTimeout(pollChat, 700);
+    chat.timer = setTimeout(pollChat, 300);
   } catch (error) {
     const assistant = chat.messages[chat.messages.length - 1];
     if (assistant?.role === "assistant") {
@@ -414,7 +539,7 @@ async function sendChat() {
   input.value = "";
   hideSlash();
   chat.messages.push({role: "user", text: message});
-  chat.messages.push({role: "assistant", pending: true, text: "", error: "", receipts: []});
+  chat.messages.push({role: "assistant", pending: true, text: "", thinking: "", error: "", receipts: []});
   chat.running = true;
   chat.started = Date.now();
   chat.receipts = [];
@@ -792,6 +917,13 @@ document.addEventListener("keydown", event => {
 $("#view").addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button) return;
+  if (button.classList.contains("code-copy")) {
+    const code = button.closest(".code-block")?.querySelector("code");
+    if (code && navigator.clipboard) {
+      navigator.clipboard.writeText(code.innerText).then(() => toast("代码已复制")).catch(() => toast("复制失败", true));
+    }
+    return;
+  }
   if (button.dataset.command) {
     $("#chat-input").value = button.dataset.command;
     sendChat();

@@ -45,13 +45,16 @@ class ChatSessions:
                                        network_allowed=network_allowed, entry="web"),
                           "writable": writable, "exec": exec_allowed,
                           "network": network_allowed,
-                          "thread": None, "started": 0.0, "finished": None}
+                          "thread": None, "started": 0.0, "finished": None,
+                          "stream_text": "", "thinking": ""}
                 self.records[session] = record
                 new = True
             thread = threading.Thread(target=self._run, args=(record, message, limits), daemon=True)
             record["thread"] = thread
             record["started"] = time.time()
             record["finished"] = None
+            record["stream_text"] = ""
+            record["thinking"] = ""
             thread.start()
             return {"session": session, "task_id": record["task"].id, "status": "running",
                     "started": record["started"], "writable": writable,
@@ -59,12 +62,20 @@ class ChatSessions:
 
     def _run(self, record: dict, message: str, limits: dict) -> None:
         task = record["task"]
+        def append(field: str, delta: str) -> None:
+            if not delta:
+                return
+            with self.lock:
+                record[field] = (record.get(field, "") + delta)[-200_000:]
+
         try:
             async def run():
                 import httpx
                 async with httpx.AsyncClient(timeout=60) as client:
                     await task.run(message, executor(client, None, self.store),
-                                   max_turns=limits["max_turns"], timeout=limits["timeout"])
+                                   max_turns=limits["max_turns"], timeout=limits["timeout"],
+                                   on_text=lambda delta: append("stream_text", delta),
+                                   on_thinking=lambda delta: append("thinking", delta))
             asyncio.run(run())
         except BaseException as exc:
             if task.status in {"queued", "running"}:
@@ -87,6 +98,10 @@ class ChatSessions:
             result.update(session=session, started=record["started"], finished=record["finished"],
                           writable=record["writable"], exec_allowed=record["exec"],
                           network_allowed=record["network"],
+                          stream_text=record.get("stream_text", ""),
+                          thinking=record.get("thinking", ""),
+                          streaming=bool(record["thread"] and record["thread"].is_alive()
+                                         and result["status"] == "running"),
                           elapsed=max(0.0, (record["finished"] or time.time()) - record["started"]))
             return result
 

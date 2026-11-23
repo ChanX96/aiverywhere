@@ -301,6 +301,8 @@ aiverywhere web
 
 The default URL is `http://127.0.0.1:8765/`. A desktop TTY tries to open it automatically; `--no-open` only prints the URL.
 
+The chat renders Markdown (headings, lists, quotes, links, inline code, and fenced code with language labels/copy buttons), shows model-returned reasoning in a collapsible panel, and streams text as SSE/polling deltas arrive.
+
 ## Memory
 
 ### Shell

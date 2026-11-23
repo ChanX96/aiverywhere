@@ -302,7 +302,7 @@ aiverywhere web
 
 `link` 创建指向活动 skill 目录的符号链接，重复运行保持幂等；旧的文件链接可迁移，指向其他位置的外来链接拒绝覆盖。
 
-工作台的“对话与工作”把任务提交给当前实例，默认只读；可以分别开启“允许修改项目文件”“允许执行项目命令”“允许联网搜索/抓取”。**session 是持久对话，task 是一次执行**：CLI session 写入 `data/sessions/`，可用 `aiverywhere chat --resume <id>` 或交互内 `/resume <id>` 继续；Web 对话是当前 web 进程内的临时会话，切换模式或重启 supervisor 会重置上下文。Web 的“会话与任务”页列出 CLI 持久 session 及恢复命令，“运行日志”按 task 展示执行记录。右侧列出本轮工具回执。模型未配置时，页面会报告错误，不会静默降级。
+工作台的“对话与工作”把任务提交给当前实例，默认只读；模型返回的回答按 Markdown 渲染（标题、列表、引用、链接、内联代码、带语言标签和复制按钮的代码块），思考过程可折叠查看，回答会随 SSE/轮询增量显示；可以分别开启“允许修改项目文件”“允许执行项目命令”“允许联网搜索/抓取”。**session 是持久对话，task 是一次执行**：CLI session 写入 `data/sessions/`，可用 `aiverywhere chat --resume <id>` 或交互内 `/resume <id>` 继续；Web 对话是当前 web 进程内的临时会话，切换模式或重启 supervisor 会重置上下文。Web 的“会话与任务”页列出 CLI 持久 session 及恢复命令，“运行日志”按 task 展示执行记录。右侧列出本轮工具回执。模型未配置时，页面会报告错误，不会静默降级。
 
 Web 的“Agent 定义”现在编辑整个 bundle：`SKILL.md`、`references/*.md|json` 和 `scripts/*.sh`。每个文件按内容哈希做并发修订检查；主文件仍使用活动版本规则。
 

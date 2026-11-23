@@ -37,6 +37,18 @@ def _contract(text: str) -> int:
     return int(match[1]) if match else 0
 
 
+def _override_path(store: Store, name: str) -> Path:
+    root = override_dir(store)
+    path = root / f"{name}.md"
+    if path.is_file():
+        try:
+            if not path.resolve().is_relative_to(root.resolve()):
+                raise WorkflowError(f"workflow 覆盖文件越界：{path.name}")
+        except OSError as exc:
+            raise WorkflowError(f"workflow 覆盖文件不可读取：{path.name}") from exc
+    return path
+
+
 def _read(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
         raise WorkflowError(f"workflow 模块不可读取：{path.name}")
@@ -58,8 +70,8 @@ def module_info(store: Store, name: str) -> dict:
     row = {"name": name, "source": "default", "path": str(default),
            "contract": version, "compatible": version == CONTRACT,
            "override": None, "ignored_override": None}
-    override = override_dir(store) / f"{name}.md"
-    if name == "finish":
+    override = _override_path(store, name)
+    if name not in OVERRIDABLE:
         if override.is_file():
             row["ignored_override"] = str(override)
         return row

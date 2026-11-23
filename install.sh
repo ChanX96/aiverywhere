@@ -36,7 +36,7 @@ usage() {
   --bin-dir DIR      命令链接目录（默认 ~/.local/bin）
   --source TARGET    pip 安装源：本地目录、wheel 或 Python 包名
   --ref REF          从 GitHub 获取的分支或标签（默认 main）
-  --import PACKAGE   安装后导入 AIVERYWHERE 迁移包（需要 --cli）
+  --import PACKAGE   安装后导入迁移包（宿主模式需要 jq）
   --no-link          不创建项目技能链接
   --dry-run          只打印将执行的命令
   -h, --help         显示本帮助
@@ -159,6 +159,11 @@ while [ $# -gt 0 ]; do
             [ $# -gt 0 ] || fail "--ref 需要分支或标签"
             REF=$1
             ;;
+        --import)
+            shift
+            [ $# -gt 0 ] || fail "--import 需要迁移包路径"
+            IMPORT_FILE=$1
+            ;;
         --no-link) LINK="no" ;;
         --dry-run) DRY_RUN=1 ;;
         -h|--help) usage; exit 0 ;;
@@ -204,7 +209,6 @@ esac
 # The host-only path is pure POSIX Shell: copy the skill bundle, bind a project
 # instance, and never create a Python environment.
 if [ "$WITH_CLI" = "no" ]; then
-    [ -z "$IMPORT_FILE" ] || fail "仅宿主安装没有 Python 导入器；请加 --cli 后再导入迁移包"
     case "$LINK" in
         ask) LINK="yes" ;;
     esac
@@ -255,6 +259,11 @@ if [ "$WITH_CLI" = "no" ]; then
         else
             AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/init-instance.sh" "$PROJECT_DIR" ||
                 fail "初始化实例失败"
+        fi
+        if [ -n "$IMPORT_FILE" ]; then
+            AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/import-migration.sh" \
+                --package "$IMPORT_FILE" --project "$PROJECT_DIR" --home "$HOME_DIR" ||
+                fail "迁移包导入失败：$IMPORT_FILE"
         fi
     fi
     note ""
@@ -323,6 +332,11 @@ if [ -f "$skill_source/SKILL.md" ]; then
         else
             AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/init-instance.sh" "$PROJECT_DIR" ||
                 fail "初始化实例失败"
+        fi
+        if [ -n "$IMPORT_FILE" ]; then
+            AIVERYWHERE_HOME="$HOME_DIR" sh "$target/scripts/import-migration.sh" \
+                --package "$IMPORT_FILE" --project "$PROJECT_DIR" --home "$HOME_DIR" ||
+                fail "迁移包导入失败：$IMPORT_FILE"
         fi
     fi
 else

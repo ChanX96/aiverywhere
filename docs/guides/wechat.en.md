@@ -1,5 +1,8 @@
 # WeChat integration for aiverywhere
 
+> [User manual](README.en.md) · Channels · WeChat
+
+
 [简体中文](wechat.md) | **English**
 
 aiverywhere **does not log in to personal WeChat directly**. The commands below assume `aiverywhere` is on `PATH`; add `--home` or set `AIVERYWHERE_HOME` for a custom install root. A trusted gateway owns WeChat login, account pairing, inbound verification, and sending. aiverywhere turns verified inbound messages into durable tasks, generates answers with the instance model, and writes answers and delivery receipts back to the gateway. The WeChat channel is an optional adapter; it does not change the core agent loop used by hosts or the CLI.

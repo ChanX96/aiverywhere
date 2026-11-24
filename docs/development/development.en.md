@@ -1,5 +1,7 @@
 # aiverywhere Development Guide
 
+> [Developer manual](README.en.md) · Development guide
+
 [简体中文](development.md) | **English**
 
 **Do not add an entity unless it is necessary.** Before adding a module, class, dependency, process, or persistent file, explain which concrete scenario the current structure cannot handle. Reuse an existing function or tool when it completes the task clearly.

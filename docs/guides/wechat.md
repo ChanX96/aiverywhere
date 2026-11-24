@@ -1,5 +1,8 @@
 # 微信接入 aiverywhere
 
+> [用户手册](README.md) · 渠道 · 微信
+
+
 **简体中文** | [English](wechat.en.md)
 
 > 本文是旧版微信专用协议。新部署建议使用[通用消息通道](channels.md)；旧 `wechat` 配置仍兼容。

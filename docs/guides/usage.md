@@ -1,8 +1,31 @@
 # 使用 aiverywhere
 
+> [用户手册](README.md) · 使用
+
+
 **简体中文** | [English](usage.en.md)
 
 只使用宿主入口时不需要执行 CLI 命令，直接读取 `.agents/skills/aiverywhere/SKILL.md` 并使用同目录 `scripts/`。`aiverywhere` 仅指可选 CLI；未加入 PATH 时使用其安装实例的 `venv/bin/aiverywhere`。宿主和 CLI 共享同一个 `.aiverywhere/` 实例。
+
+本文是**完整参考**。第一次使用请先完成[安装](install.md)，再按下面的路径阅读；不需要从头读到尾。
+
+| 你要做什么 | 看这里 |
+| --- | --- |
+| 配置模型、运行预算、MCP 或通用通道 | [统一配置](#统一配置) |
+| 在终端对话、使用 session、审批和取消 | [CLI](#cli-session-与自动-compaction) 和 [权限](#cli-权限与审批) |
+| 打开本地 Web、处理运行中决定 | [环境、对话和委派](#环境对话和委派) |
+| 记忆、技能、workflow 覆盖 | [记忆、技能和本地工作台](#记忆技能和本地工作台) |
+| 开启宿主免点名接入或迁移 | [宿主接入与迁移](#宿主接入与迁移) |
+| 定时任务、消息通道、微信 | [定时任务](#定时任务和唤醒) · [消息通道](#消息通道与交付) · [微信接入](wechat.md) |
+
+推荐的第一条命令：
+
+```sh
+aiverywhere setup
+aiverywhere env
+aiverywhere
+```
+
 
 ```sh
 aiverywhere --version

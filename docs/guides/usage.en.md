@@ -1,5 +1,8 @@
 # Using aiverywhere
 
+> [User manual](README.en.md) · Usage
+
+
 [简体中文](usage.md) | **English**
 
 A host-only install does not need the CLI commands below; point the host at `.agents/skills/aiverywhere/SKILL.md` and use its sibling `scripts/`. `aiverywhere` is only the optional CLI; if it is not on `PATH`, use its installed `venv/bin/aiverywhere`. Hosts and the CLI share the same `.aiverywhere/` instance.

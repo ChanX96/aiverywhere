@@ -1,5 +1,8 @@
 # aiverywhere 项目开发规范
 
+> [开发手册](README.md) · 开发规范
+
+
 **简体中文** | [English](development.en.md)
 
 **如无必要，勿增实体。** 新增模块、类、依赖、进程或持久文件前，先说明现有结构在哪个具体场景下已不够用。现有函数或工具能清楚完成任务时，直接复用。
@@ -26,8 +29,10 @@ CHANGELOG.md                  版本变更
 LICENSE                       许可
 Makefile                      安装、测试、检查和构建的固定入口
 README.md / README.en.md      中英文项目说明
-docs/guides/                  中英文安装、使用与微信接入指南
-docs/development/             设计方案与开发规范
+docs/guides/                  用户手册：安装、使用、渠道、微信和迁移
+docs/guides/README.md         用户手册入口与能力/边界索引
+docs/development/             开发手册：规范、设计、验收和发布
+docs/development/README.md     开发手册入口与目录说明
 docs/CONTRIBUTING.md / .en.md 贡献指南
 docs/SECURITY.md / .en.md     安全问题报告
 docs/CODE_OF_CONDUCT.md / .en.md 行为准则
@@ -38,8 +43,9 @@ work/                         worker 私有工作区（可回收）
 pyproject.toml                包元数据、构建后端、依赖、工具配置和 CLI 入口
 src/aiverywhere/
     cli/                       argparse、命令处理与组合根
-    core/                      agent、store、memory、tools、worker、dream
-    integrations/web/          本地管理服务、对话和 static 资源
+    core/                      agent、store、memory、tools、worker、workflow、adoption、migrate
+    integrations/web/          本地管理服务、Web 对话和 static 资源
+    integrations/bridges/      bridge 抽象、manifest 发现和健康检查
     integrations/wechat.py     微信网关适配
     platform/                  environment、sandbox
     ui/                        欢迎屏与终端主题
@@ -52,7 +58,13 @@ tests/test_stream.py           SSE 文本、CLI 流式输出和取消基础测�
 tests/test_workers.py          worker 私有工作区、产物交接和权限测试
 tests/test_session.py          durable session、锁、崩溃恢复和 compaction
 tests/test_permissions.py      权限过滤、授权审批、TTY prompt 和网络开关
-tests/test_installer.py        仅宿主安装与项目本地实例
+tests/test_installer.py        仅宿主安装、迁移导入和项目本地实例
+tests/test_workflow.py         workflow 模块、覆盖、必记项和 finish 固定
+tests/test_activities.py       工具/Skill/MCP 活动和 todo 状态
+tests/test_adoption.py         宿主引导块启用、幂等和撤销
+tests/test_input.py            ask_user、运行中补充输入和 Web 输入
+tests/test_migrate.py          迁移包导出、检查、导入和安全校验
+tests/test_acceptance_matrix.py 十个 CLI/宿主验收场景
 tests/shell/memory.sh          纯 Shell 记忆互读验收
 ```
 
@@ -63,6 +75,17 @@ tests/shell/memory.sh          纯 Shell 记忆互读验收
 - 安装和宿主导入只有一条与产品无关的路径：`install.sh` 的仅宿主分支只用 POSIX Shell 复制 bundle、初始化实例并创建 `.agents/skills/aiverywhere` 目录链接；`--cli` 才建 Python 环境并调用 `setup`。旧文件链接可迁移。
 - `config.json` 包含 `model`、`defaults`、`mcpServers`、`wechat`、`session`、`channels`。模型连接参数和运行预算分别归属两个分区；交互配置必须为除模型名和凭据以外的项提供默认值。凭据不得出现在命令输出或测试日志。
 - 核心注释优先解释协议回执、锁、修订、故障恢复和目录边界的原因。新命令同步更新安装或使用指南；用户可感知的行为变化同步更新设计说明。
+
+## 文档规范
+
+README 只做项目门面：说明项目是什么、目标、快速开始、入口和文档地图，不承载完整安装/使用/开发细节。`docs/guides/README.md` 是用户手册入口，安装、使用、渠道、微信和迁移按用户任务拆分。`docs/development/README.md` 是开发手册入口，规范、设计、验收和发布按开发者任务拆分。
+
+- 一个页面面向一类读者，解决一组任务；细节链接到对应页面，不在 README 重复。
+- 微信/飞书等平台配置放在用户手册的渠道页面，不放在 README 或开发规范。
+- 命令、路径、平台和版本必须从当前代码与配置验证；未验证的真实宿主、账号和浏览器明确写为边界。
+- 用户可感知行为、新命令、新配置和安装变化同步更新用户手册；内部协议和设计原因更新开发手册。
+- 合并前运行相对链接检查；文档中的示例命令至少验证一次，不能只靠阅读。
+- 文档使用短句、明确主语和可执行命令；避免“应该”“可能”等无法验收的承诺。
 
 ## 选择与改动相称的验收
 

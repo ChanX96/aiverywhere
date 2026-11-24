@@ -200,6 +200,8 @@ function chatReceipts(list, detailed = false) {
   }).join("")}</div>`;
 }
 
+// Markdown is rendered locally: escape all source text first, then add only
+// the tags produced here. Raw HTML and unsafe link protocols are never emitted.
 function safeHref(value) {
   const href = String(value || "").trim();
   if (href.startsWith("//")) return "#";
@@ -463,6 +465,7 @@ function paintChat() {
   const stream = $("#chat-stream");
   if (!stream) return;
   const stick = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 90;
+  // Re-rendering for streaming must not collapse a panel the user just opened.
   const details = new Map([...stream.querySelectorAll("details[data-key]")].map(item =>
     [item.dataset.key, item.open]));
   stream.innerHTML = chatThread();
@@ -491,6 +494,8 @@ const STREAM_SPEEDS = {
   fast: {tick: 30, base: 2, max: 6},
 };
 
+// Polling may deliver a large delta at once. Drain it through a small
+// typewriter buffer so the text remains readable without changing the model.
 function pumpStream(message) {
   if (message.streamTimer) return;
   const speed = STREAM_SPEEDS[chat.speed] || STREAM_SPEEDS.normal;
@@ -643,6 +648,8 @@ async function runWebCommand(raw) {
   systemMessage(`未知命令：${command}\n输入 /help 查看 Web 命令。`);
 }
 
+// While a task is running, plain input supplements the current task; /next
+// queues a separate task for after the current one finishes.
 async function sendRunningInput(text) {
   const result = await api("/api/chat/input", "POST", {session: chat.session, text});
   toast(result.outcome === "answer" ? "决定已提交" : "已收到，将并入当前任务");

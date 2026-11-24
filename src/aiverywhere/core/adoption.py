@@ -27,10 +27,12 @@ class AdoptionError(ValueError):
 
 
 def settings_path(store: Store) -> Path:
+    """Project-scoped adoption state, deliberately outside the memory store."""
     return store.data / "project-settings" / f"{store.memory.key}.json"
 
 
 def _state(store: Store) -> dict:
+    """Read optional settings; a missing/corrupt file means "unanswered"."""
     path = settings_path(store)
     if not path.is_file():
         return {}
@@ -42,6 +44,7 @@ def _state(store: Store) -> dict:
 
 
 def _save(store: Store, **changes) -> dict:
+    """Atomically update only the adoption-related project settings."""
     path = settings_path(store)
     value = _state(store)
     value.update(changes)
@@ -55,6 +58,7 @@ def _save(store: Store, **changes) -> dict:
 
 
 def _host(host: str | None) -> str | None:
+    """Prefer an explicit host, then host markers already present in the environment."""
     if host:
         return host
     if os.environ.get("CLAUDECODE"):
@@ -65,6 +69,7 @@ def _host(host: str | None) -> str | None:
 
 
 def _candidate(store: Store, host: str | None) -> tuple[str | None, str]:
+    """Choose a rule file only when the host has a real auto-loading convention."""
     mapped = {"claude-code": "CLAUDE.md", "codex": "AGENTS.md",
               "dsh": "AGENTS.md"}.get(host or "")
     existing = [name for name in ("CLAUDE.md", "AGENTS.md", ".cursor/rules/aiverywhere.mdc")
@@ -79,6 +84,7 @@ def _candidate(store: Store, host: str | None) -> tuple[str | None, str]:
 
 
 def detect(store: Store, host: str | None = None) -> dict:
+    """Return a read-only adoption report; never edits the project."""
     host = _host(host)
     file, mode = _candidate(store, host)
     state = _state(store).get("host_adoption", {})
@@ -95,6 +101,7 @@ def detect(store: Store, host: str | None = None) -> dict:
 
 
 def _validate_file(store: Store, file: str) -> Path:
+    """Keep the managed write inside the project and to known rule files."""
     if file not in ALLOWED:
         raise AdoptionError("不支持的宿主规则文件")
     target = (store.project / file).resolve()
@@ -106,6 +113,7 @@ def _validate_file(store: Store, file: str) -> Path:
 
 
 def enable(store: Store, file: str | None = None, host: str | None = None) -> dict:
+    """Write the managed block once, preserving everything outside the markers."""
     detected = detect(store, host)
     file = file or detected["file"]
     if not file:
@@ -118,6 +126,7 @@ def enable(store: Store, file: str | None = None, host: str | None = None) -> di
             _, end, remainder = after.partition(END)
             if not end:
                 raise AdoptionError("已有 AIVERYWHERE 引导块缺少结束标记，请先人工检查")
+            # Rebuild only the marked region; never rewrite the user's surrounding rules.
             new = before.rstrip() + "\n\n" + BLOCK + remainder
         else:
             new = old.rstrip() + "\n\n" + BLOCK + "\n"
@@ -140,6 +149,7 @@ def enable(store: Store, file: str | None = None, host: str | None = None) -> di
 
 
 def disable(store: Store) -> dict:
+    """Remove only the managed block; user rules and memory stay untouched."""
     state = _state(store).get("host_adoption", {})
     file = state.get("file") or detect(store).get("file")
     changed = False
@@ -167,6 +177,7 @@ def disable(store: Store) -> dict:
 
 
 def status(store: Store) -> dict:
+    """Return detection plus the saved decision, without changing either."""
     detected = detect(store)
     detected["status"] = _state(store).get("host_adoption", {}).get("status", "unanswered")
     return detected

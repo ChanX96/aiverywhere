@@ -1,5 +1,8 @@
 # 安装 aiverywhere
 
+> [用户手册](README.md) · 安装
+
+
 **简体中文** | [English](install.en.md)
 
 仅宿主安装适用于 macOS 或 Linux、POSIX `sh`；`jq` 可选，缺失时安装、初始化、skill 加载和 `workflow-path.sh` 仍可用；`validate-memory.sh` 返回 `unavailable`，`write/read/list-memory.sh` 会以 exit 3 明确失败，需改用宿主原生 JSON/文件工具。可选 CLI 需要 Python 3.11+。安装不区分宿主产品：任意能读文件、能执行命令的 agent 使用同一份指南。用户给出下面一句话即可：

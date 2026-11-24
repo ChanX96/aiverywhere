@@ -85,6 +85,7 @@ def _manifest(store: Store, files: dict[str, tuple[bytes, int, str]]) -> dict:
 
 
 def export(store: Store, output: Path, *, force: bool = False) -> dict:
+    """Create a bounded package of the active skill, overrides, and memory-v1 only."""
     files = _source_files(store)
     manifest = _manifest(store, files)
     output = output.resolve()
@@ -157,6 +158,7 @@ def _members(archive: tarfile.TarFile) -> tuple[dict, dict[str, bytes]]:
 
 
 def inspect(package: Path) -> dict:
+    """Validate a package without extracting it into the target instance."""
     with tarfile.open(package, "r:gz") as archive:
         manifest, files = _members(archive)
     kinds = {}
@@ -171,6 +173,7 @@ def inspect(package: Path) -> dict:
 
 
 def _write_checked(path: Path, data: bytes, mode: int) -> str:
+    """Never overwrite a local file or follow a symlink during import."""
     if path.is_symlink():
         return "conflict"
     if path.exists():
@@ -183,6 +186,7 @@ def _write_checked(path: Path, data: bytes, mode: int) -> str:
 
 
 def import_package(store: Store, package: Path) -> dict:
+    """Import validated files; identical records are skipped and conflicts are kept local."""
     with tarfile.open(package, "r:gz") as archive:
         manifest, files = _members(archive)
     if manifest.get("skill_contract") != workflow.CONTRACT:

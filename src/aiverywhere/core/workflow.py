@@ -20,6 +20,7 @@ class WorkflowError(ValueError):
 
 
 def default_dir(store: Store) -> Path:
+    """Resolve the shipped workflow files, preferring the active skill bundle."""
     local = store.skill_dir / "references" / "workflow"
     if local.is_dir():
         return local
@@ -30,6 +31,7 @@ def default_dir(store: Store) -> Path:
 
 
 def override_dir(store: Store) -> Path:
+    """Return the project-scoped override directory; absence is valid."""
     return store.home / "overrides" / store.memory.key / "workflow"
 
 
@@ -64,6 +66,7 @@ def _read(path: Path) -> str:
 
 
 def module_info(store: Store, name: str) -> dict:
+    """Describe the effective source and contract without changing files."""
     if name not in MODULES:
         raise WorkflowError(f"未知 workflow 模块：{name}")
     default = default_dir(store) / f"{name}.md"
@@ -91,10 +94,12 @@ def module_info(store: Store, name: str) -> dict:
 
 
 def list_modules(store: Store) -> list[dict]:
+    """List all five modules, including ignored finish overrides."""
     return [module_info(store, name) for name in MODULES]
 
 
 def load_module(store: Store, name: str) -> dict:
+    """Load one effective module, refusing incompatible overrides."""
     row = module_info(store, name)
     if row.get("error"):
         raise WorkflowError(row["error"])
@@ -107,5 +112,6 @@ def load_module(store: Store, name: str) -> dict:
 
 
 def paths(store: Store) -> dict:
+    """Expose the same paths used by hosts and the CLI."""
     return {"default": str(default_dir(store)), "overrides": str(override_dir(store)),
             "project_key": store.memory.key, "contract": CONTRACT}

@@ -1,5 +1,8 @@
 # 通用消息通道
 
+> [用户手册](README.md) · 渠道
+
+
 **简体中文** | [English](channels.en.md)
 
 aiverywhere 不直接登录任何 IM 平台。WeChat、飞书、iMessage 或自定义桥接器通过一个很小的 **webhook channel envelope** 接入；aiverywhere 负责任务、模型执行、持久化和回复路由，桥接器负责平台登录、签名验证和实际发送。

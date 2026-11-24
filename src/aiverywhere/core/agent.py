@@ -433,6 +433,7 @@ class Task:
         return values
 
     async def ask_user(self, question: str, options: list[str] | None = None) -> str:
+        """Pause the task until the session supplies a decision; no model turn is consumed."""
         import asyncio
         question = str(question).strip()
         if not question or len(question) > 4000:

@@ -62,6 +62,7 @@ class ChatSessions:
                     "exec": exec_allowed, "network": network_allowed, "new_session": new}
 
     def provide(self, session: str, text: str) -> dict:
+        """Feed a running Web task or resolve its pending ask_user decision."""
         if not isinstance(session, str) or not SESSION.fullmatch(session):
             raise ValueError("会话标识无效")
         if not isinstance(text, str) or not text.strip() or len(text) > 8000:

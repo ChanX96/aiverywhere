@@ -1,5 +1,8 @@
 # Generic message channels
 
+> [User manual](README.en.md) · Channels
+
+
 [简体中文](channels.md) | **English**
 
 aiverywhere never logs in to an IM platform itself. WeChat, Feishu, iMessage, and custom bridges use one small **webhook channel envelope**. The bridge owns platform login, signature verification, and delivery; aiverywhere owns the task, model execution, persistence, and reply routing.

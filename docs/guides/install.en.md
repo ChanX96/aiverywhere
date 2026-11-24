@@ -1,5 +1,7 @@
 # Install aiverywhere
 
+> [User manual](README.en.md) · Installation
+
 [简体中文](install.md) | **English**
 
 Host-only installation needs macOS or Linux with POSIX `sh`; `jq` is optional. Without it, installation, initialization, skill loading, and `workflow-path.sh` still work; `validate-memory.sh` reports `unavailable`, while `write/read/list-memory.sh` fail explicitly with exit 3, so use native JSON/file tools instead. The optional CLI needs Python 3.11+. Installation is host-neutral: any agent that can read files and run commands follows the same guide. The user only needs one sentence:
